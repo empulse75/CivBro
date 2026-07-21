@@ -1,0 +1,2 @@
+# Exclude documentation assets when exporting/downloading zip archives
+screenshots/ export-ignore

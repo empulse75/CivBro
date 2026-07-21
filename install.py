@@ -167,8 +167,19 @@ def build_rust_core() -> None:
     print(f"[CivBro] Rust core built and copied to {dest_lib}")
 
 
+def cleanup_repo_docs() -> None:
+    screenshots_dir = EXTENSION_DIR / "screenshots"
+    if screenshots_dir.exists() and screenshots_dir.is_dir():
+        try:
+            shutil.rmtree(screenshots_dir)
+            print("[CivBro] Cleaned up documentation screenshots folder")
+        except Exception:
+            pass
+
+
 def install() -> None:
     print("[CivBro] Installing dependencies...")
+    cleanup_repo_docs()
     install_pip_deps()
     build_rust_core()
     print("[CivBro] Installation complete.")

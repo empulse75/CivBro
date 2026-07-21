@@ -1720,13 +1720,7 @@ def register_routes(app):
 
     _schedule_lock = asyncio.Lock()
 
-    def _schedule_downloads():
-        if _schedule_lock.locked():
-            asyncio.create_task(_schedule_downloads_async())
-            return
-        _schedule_downloads_sync()
-
-    async def _schedule_downloads_async():
+    async def _schedule_downloads():
         async with _schedule_lock:
             _schedule_downloads_sync()
 
@@ -1801,7 +1795,7 @@ def register_routes(app):
             except Exception as e:
                 logger.debug(f"Failed to add download to DB: {e}")
 
-        _schedule_downloads()
+        await _schedule_downloads()
         return entry
 
     @app.get(f"{PREFIX}/download/queue")
@@ -1984,7 +1978,7 @@ def register_routes(app):
                     except Exception:
                         pass
                 _download_queue[:] = [d for d in _download_queue if d.get("id") != download_id]
-                _schedule_downloads()
+                await _schedule_downloads()
                 return
 
             # Verify completeness
@@ -2023,7 +2017,7 @@ def register_routes(app):
             except Exception as e:
                 logger.debug(f"Failed to update download status: {e}")
 
-        _schedule_downloads()
+        await _schedule_downloads()
 
     # ---- Startup: recover stale entries from a prior (interrupted) session ----
     if DB is not None:
