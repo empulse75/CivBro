@@ -1,0 +1,26 @@
+[package]
+name = "civbro_core"
+version = "1.0.0"
+edition = "2021"
+
+[lib]
+name = "civbro_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.23", features = ["extension-module"] }
+rusqlite = { version = "0.32", features = ["bundled", "vtab"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+hex = "0.4"
+blake3 = "1.5"
+walkdir = "2.5"
+
+# Baremetal optimization (README §13 mandate). LTO/opt-level go in the profile
+# (setting `-C lto` via RUSTFLAGS conflicts with Cargo's per-dep embed-bitcode);
+# pair with RUSTFLAGS="-C target-cpu=native" at build time for SHA/AVX codegen.
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

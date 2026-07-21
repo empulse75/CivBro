@@ -1,0 +1,16 @@
+# Ignore intermediate build files and node_modules
+node_modules/
+**/node_modules/
+target/
+**/target/
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# Local runtime data & logs
+civbro.db
+*.db
+*.log
+.DS_Store
+.vscode/
+.idea/
