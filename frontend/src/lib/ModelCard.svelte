@@ -324,9 +324,11 @@
   // the clip's own first frame as a placeholder (with the ▶ indicator) until it
   // starts playing. Only near-viewport clips ever load, so the grid stays light.
   function bgAutoVideo(node: HTMLVideoElement, src: string) {
-    let srcSet = false;
-    let inView = false;
+    // Set src immediately so the first frame / poster shows at page load.
+    // Only play/pause is gated by viewport visibility.
+    if (src && !node.src) node.src = src;
 
+    let inView = false;
     const play = () => {
       if (!inView) return;
       node.play?.().then(() => { videoPlaying = true; }).catch(() => {});
@@ -335,13 +337,12 @@
       for (const e of entries) {
         inView = e.isIntersecting;
         if (inView) {
-          if (!srcSet && src) { node.src = src; srcSet = true; }
           play();
         } else {
           node.pause?.();
         }
       }
-    }, { rootMargin: "300px" });
+    }, { rootMargin: "400px" });
     io.observe(node);
     const onPlaying = () => { videoPlaying = true; };
     node.addEventListener("playing", onPlaying);
@@ -375,10 +376,11 @@
         class="civ-card-media absolute inset-0 w-full h-full object-cover transition-all duration-300
           {shouldBlur ? 'blur-[12px] scale-110' : 'blur-0 scale-100'}"
         use:bgAutoVideo={imageUrl}
+        poster={model.poster || undefined}
         loop
         muted
         playsinline
-        preload="auto"
+        preload="metadata"
         onerror={handleImageError}
       ></video>
       {#if !videoPlaying}

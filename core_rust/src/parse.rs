@@ -465,6 +465,16 @@ pub fn parse_model_slim(raw: &Value) -> Value {
         .or_else(|| mv0.and_then(|mv| mv.get("createdAt")))
         .and_then(|v| v.as_str());
 
+    // Use API-provided poster as fallback when not computable from images array
+    let poster_val = if poster.is_empty() {
+        raw.get("poster")
+            .and_then(|v| v.as_str())
+            .map(|p| json!(optimize_image_url(p, 300, "image")))
+            .unwrap_or(Value::Null)
+    } else {
+        json!(poster)
+    };
+
     json!({
         "id": raw.get("id"),
         "name": raw.get("name"),
@@ -479,7 +489,7 @@ pub fn parse_model_slim(raw: &Value) -> Value {
         "publishedAt": published_at,
         "createdAt": created_at,
         "images": images,
-        "poster": if poster.is_empty() { Value::Null } else { json!(poster) },
+        "poster": poster_val,
         "cosmetic": extract_cosmetic(raw),
         "avatarDeco": extract_creator_cosmetics(raw)["avatarDeco"].clone(),
         "badge": extract_creator_cosmetics(raw)["badge"].clone(),
@@ -783,8 +793,7 @@ pub fn build_trpc_extras(item_json: &str) -> Result<String, String> {
         .map(|a| a.iter().collect::<Vec<_>>())
         .unwrap_or_default();
 
-    if let Some(first_img) = imgs.first() {
-        let mut im = (*first_img).clone();
+    if let Some(first_img) = imgs.first().and_then(|v| v.as_object()) {
         let img_url = first_img
             .get("url")
             .and_then(|v| v.as_str())
@@ -793,6 +802,7 @@ pub fn build_trpc_extras(item_json: &str) -> Result<String, String> {
             .get("type")
             .and_then(|v| v.as_str())
             .unwrap_or("image");
+        let mut im = Value::Object(first_img.clone());
         im["url"] = json!(optimize_image_url(img_url, 300, img_type));
         extras.insert("images".into(), json!([im]));
     }

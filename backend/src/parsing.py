@@ -162,6 +162,11 @@ def _py_parse_model_slim(raw: dict) -> dict:
     mv0 = mvs[0] if mvs else {}
     published_at = raw.get("publishedAt") or mv0.get("publishedAt")
     created_at = raw.get("createdAt") or mv0.get("createdAt")
+    # Fall back to the API-provided poster if none was computed from images
+    if not poster:
+        api_poster = raw.get("poster")
+        if api_poster:
+            poster = optimize_image_url(str(api_poster), 300, "image")
     return {
         "id": raw.get("id"),
         "name": raw.get("name"),
