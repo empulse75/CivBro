@@ -329,9 +329,12 @@
     if (src && !node.src) node.src = src;
 
     let inView = false;
+    const updatePlaying = () => {
+      videoPlaying = !node.paused;
+    };
     const play = () => {
       if (!inView) return;
-      node.play?.().then(() => { videoPlaying = true; }).catch(() => {});
+      node.play?.().then(updatePlaying).catch(() => {});
     };
     const io = new IntersectionObserver((entries) => {
       for (const e of entries) {
@@ -339,13 +342,14 @@
         if (inView) {
           play();
         } else {
+          videoPlaying = false;
           node.pause?.();
         }
       }
     }, { rootMargin: "400px" });
     io.observe(node);
-    const onPlaying = () => { videoPlaying = true; };
-    node.addEventListener("playing", onPlaying);
+    node.addEventListener("playing", updatePlaying);
+    node.addEventListener("pause", () => { videoPlaying = false; });
     node.addEventListener("canplay", play);
     node.addEventListener("loadeddata", play);
 
@@ -354,7 +358,8 @@
         io.disconnect();
         node.removeEventListener("canplay", play);
         node.removeEventListener("loadeddata", play);
-        node.removeEventListener("playing", onPlaying);
+        node.removeEventListener("playing", updatePlaying);
+        node.removeEventListener("pause", updatePlaying);
         node.pause?.();
       },
     };
