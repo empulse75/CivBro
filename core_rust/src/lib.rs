@@ -2,6 +2,7 @@ use pyo3::prelude::*;
 use std::path::Path;
 
 mod db;
+mod parse;
 
 use db::Database as CivBroDb;
 
@@ -43,7 +44,13 @@ impl PyDatabase {
     }
 
     #[pyo3(signature = (query, model_type=None, base_model=None, limit=None))]
-    fn search(&self, query: &str, model_type: Option<&str>, base_model: Option<&str>, limit: Option<i64>) -> PyResult<String> {
+    fn search(
+        &self,
+        query: &str,
+        model_type: Option<&str>,
+        base_model: Option<&str>,
+        limit: Option<i64>,
+    ) -> PyResult<String> {
         if let Some(ref db) = self.inner {
             let results = db
                 .search(query, model_type, base_model, limit.unwrap_or(20))
@@ -61,16 +68,26 @@ impl PyDatabase {
             match db.get_model(id) {
                 Ok(Some(data)) => Ok(Some(data)),
                 Ok(None) => Ok(None),
-                Err(e) => Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string())),
+                Err(e) => Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                    e.to_string(),
+                )),
             }
         } else {
             Ok(None)
         }
     }
 
-    fn set_local_path(&self, model_id: i64, path: &str, hash_val: &str, hash_type: &str) -> PyResult<bool> {
+    fn set_local_path(
+        &self,
+        model_id: i64,
+        path: &str,
+        hash_val: &str,
+        hash_type: &str,
+    ) -> PyResult<bool> {
         if let Some(ref db) = self.inner {
-            Ok(db.set_local_path(model_id, path, hash_val, hash_type).unwrap_or(false))
+            Ok(db
+                .set_local_path(model_id, path, hash_val, hash_type)
+                .unwrap_or(false))
         } else {
             Ok(false)
         }
@@ -118,7 +135,9 @@ impl PyDatabase {
         if let Some(ref db) = self.inner {
             match db.get_setting(key) {
                 Ok(val) => Ok(val),
-                Err(e) => Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string())),
+                Err(e) => Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                    e.to_string(),
+                )),
             }
         } else {
             Ok(None)
@@ -142,18 +161,50 @@ impl PyDatabase {
     }
 }
 
+// ---------------------------------------------------------------------------
+// CPU-bound functions moved from Python to Rust (per AGENTS.md: "all CPU-bound,
+// data parsing, or hashing operations")
+// ---------------------------------------------------------------------------
+
+#[pyfunction]
+fn parse_models(json_items: &str, style: &str) -> PyResult<String> {
+    parse::parse_models_batch(json_items, style)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e))
+}
+
+#[pyfunction]
+fn parse_trpc_response(response_json: &str) -> PyResult<String> {
+    parse::parse_trpc_items(response_json)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e))
+}
+
+#[pyfunction]
+fn build_extras(item_json: &str) -> PyResult<String> {
+    parse::build_trpc_extras(item_json)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e))
+}
+
+#[pyfunction]
+fn merge_extras_into_slim(slim_json: &str, extras_json: &str) -> PyResult<String> {
+    parse::apply_extras_to_slim(slim_json, extras_json)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e))
+}
+
+#[pyfunction]
+fn build_slim_from_extras(extras_json: &str, model_id: i64) -> PyResult<String> {
+    parse::make_slim_from_trpc(extras_json, model_id)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e))
+}
+
 #[pyfunction]
 fn compute_file_hash(py: Python<'_>, path: &str, algorithm: &str) -> PyResult<String> {
     use sha2::{Digest, Sha256};
     use std::fs::File;
     use std::io::Read;
 
-    // Release the GIL for the whole hash so a multi-GB checkpoint doesn't block
-    // the Python event loop (the caller offloads this to a worker thread).
     py.allow_threads(|| -> PyResult<String> {
         let mut file = File::open(path)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(e.to_string()))?;
-        // 1 MB heap buffer — far fewer read syscalls than the old 64 KB buffer.
         let mut buffer = vec![0u8; 1024 * 1024];
 
         if algorithm == "sha256" {
@@ -181,9 +232,10 @@ fn compute_file_hash(py: Python<'_>, path: &str, algorithm: &str) -> PyResult<St
             }
             Ok(hasher.finalize().to_hex().to_string())
         } else {
-            Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                format!("Unsupported algorithm: {}", algorithm),
-            ))
+            Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                "Unsupported algorithm: {}",
+                algorithm
+            )))
         }
     })
 }
@@ -198,16 +250,34 @@ fn parse_json_fast(json_str: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
+fn optimize_cdn_url(url: &str, width: u32, image_type: &str) -> PyResult<String> {
+    Ok(parse::optimize_image_url(url, width, image_type))
+}
+
+#[pyfunction]
+fn file_subdir(file_type: &str, name: &str, model_type: &str) -> PyResult<String> {
+    Ok(parse::subdir_for_type(file_type, name, model_type))
+}
+
+#[pyfunction]
+fn parse_deps(trpc_json: &str) -> PyResult<String> {
+    parse::parse_dependencies(trpc_json)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e))
+}
+
+#[pyfunction]
 fn scan_model_dir(py: Python<'_>, dir_path: &str, extensions: Vec<String>) -> PyResult<String> {
     use std::time::UNIX_EPOCH;
     use walkdir::WalkDir;
 
-    // Directory walking + stat is I/O bound; release the GIL so the Python event
-    // loop stays responsive while this runs in a worker thread.
     py.allow_threads(|| -> PyResult<String> {
         let mut results: Vec<serde_json::Value> = Vec::new();
 
-        for entry in WalkDir::new(dir_path).max_depth(4).into_iter().filter_map(|e| e.ok()) {
+        for entry in WalkDir::new(dir_path)
+            .max_depth(4)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
             if !entry.file_type().is_file() {
                 continue;
             }
@@ -251,12 +321,15 @@ fn scan_model_dir(py: Python<'_>, dir_path: &str, extensions: Vec<String>) -> Py
 
 #[pyfunction]
 fn clean_orphan_parts(py: Python<'_>, root_dir: &str) -> PyResult<u32> {
-    use walkdir::WalkDir;
     use std::fs;
+    use walkdir::WalkDir;
 
     py.allow_threads(|| -> PyResult<u32> {
         let mut count = 0u32;
-        for entry in WalkDir::new(root_dir).into_iter().filter_map(|e| e.ok()) {
+        for entry in WalkDir::new(root_dir)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
             if !entry.file_type().is_file() {
                 continue;
             }
@@ -280,5 +353,13 @@ fn civbro_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse_json_fast, m)?)?;
     m.add_function(wrap_pyfunction!(scan_model_dir, m)?)?;
     m.add_function(wrap_pyfunction!(clean_orphan_parts, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_models, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_trpc_response, m)?)?;
+    m.add_function(wrap_pyfunction!(build_extras, m)?)?;
+    m.add_function(wrap_pyfunction!(merge_extras_into_slim, m)?)?;
+    m.add_function(wrap_pyfunction!(build_slim_from_extras, m)?)?;
+    m.add_function(wrap_pyfunction!(optimize_cdn_url, m)?)?;
+    m.add_function(wrap_pyfunction!(file_subdir, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_deps, m)?)?;
     Ok(())
 }

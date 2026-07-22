@@ -18,12 +18,14 @@ def on_app_started(demo: gr.Blocks, app):
         return
 
     import sys
-    backend_path = str(BACKEND_SRC)
-    if backend_path not in sys.path:
-        sys.path.insert(0, backend_path)
+    backend_pkg = str(BACKEND_SRC.parent)
+    backend_src = str(BACKEND_SRC)
+    for p in (backend_src, backend_pkg):
+        if p not in sys.path:
+            sys.path.insert(0, p)
 
     try:
-        from main import register_routes
+        from src.main import register_routes
     except ImportError as e:
         print(f"[CivBro] Failed to import backend: {e}")
         traceback.print_exc()

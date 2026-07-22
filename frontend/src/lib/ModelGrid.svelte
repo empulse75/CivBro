@@ -25,6 +25,7 @@
   }: Props = $props();
 
   let sentinelEl = $state<HTMLDivElement | null>(null);
+  let scrollContainerEl = $state<HTMLDivElement | null>(null);
 
   $effect(() => {
     if (!sentinelEl) return;
@@ -35,7 +36,7 @@
           onLoadMore();
         }
       },
-      { rootMargin: "400px" }
+      { root: scrollContainerEl, rootMargin: "400px" }
     );
 
     obs.observe(sentinelEl);
@@ -44,7 +45,7 @@
   });
 </script>
 
-<div class="h-full overflow-y-auto p-4">
+<div class="h-full overflow-y-auto p-4" bind:this={scrollContainerEl}>
   {#if loading}
     <div class="absolute top-0 left-0 right-0 h-0.5 bg-[#1a1b1e] z-10">
       <div class="h-full bg-[#2563eb] animate-loading-bar"></div>

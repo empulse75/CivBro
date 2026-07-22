@@ -1,4 +1,4 @@
-import { searchModels, getModel, getModelVersions, getVersionDetails, getLocalModels, getInstalledVersions, getFileStatus, downloadModel, getDownloadQueue, getSettings, setSettings, setThrottle, validateApiKey, getModelExtras, reorderDownloads as apiReorder } from "./api";
+import { searchModels, getModel, getModelVersions, getVersionDetails, getLocalModels, getInstalledVersions, getFileStatus, downloadModel, getDownloadQueue, getSettings, setSettings, setThrottle, validateApiKey, getModelExtras, reorderDownloads as apiReorder, getFrontendConfig, getSuggestions, type FrontendConfig } from "./api";
 
 export interface CivitaiModel {
   id: number;
@@ -182,6 +182,7 @@ export function createAppState() {
   let apiKey = $state("");
   let apiKeyValid = $state<boolean | null>(null);
   let settingsLoaded = $state(false);
+  let config = $state<FrontendConfig | null>(null);
 
   function parseSettingArr(...vals: unknown[]): string[] {
     for (const v of vals) {
@@ -209,9 +210,19 @@ export function createAppState() {
       // Fetch installed model IDs BEFORE marking settings as loaded so the
       // first card render can show green checkmarks immediately.
       await refreshInstalled();
-    } catch {
+      loadConfig();
+    } catch (e) {
+      console.error("[CivBro] loadSettings failed:", e);
     } finally {
       settingsLoaded = true;
+    }
+  }
+
+  async function loadConfig() {
+    try {
+      config = await getFrontendConfig();
+    } catch (e) {
+      console.debug("[CivBro] loadConfig failed:", e);
     }
   }
 
@@ -314,7 +325,6 @@ export function createAppState() {
           const extras = res?.extras || {};
           for (const id of chunk) extrasRequested.add(id);
           if (!extras || Object.keys(extras).length === 0) continue;
-          let changed = false;
           for (const m of models) {
             const e = extras[String(m.id)];
             if (!e) continue;
@@ -329,13 +339,11 @@ export function createAppState() {
             if (e.publishedAt && !m.publishedAt) m.publishedAt = e.publishedAt;
             if (e.createdAt && !m.createdAt) m.createdAt = e.createdAt;
             if (e.mode && !m.mode) m.mode = e.mode;
-            changed = true;
           }
-          if (changed) models = [...models];
-        } catch {}
+        } catch (e) { console.debug("[CivBro] extras chunk failed:", e); }
       }
-    } catch {
-      /* extras are best-effort; ignore failures */
+    } catch (e) {
+      console.debug("[CivBro] extras load failed:", e);
     }
   }
 
@@ -407,8 +415,8 @@ export function createAppState() {
         selectedVersion = merged;
         modelVersions = modelVersions.map((mv) => (mv.id === v.id ? merged : mv));
       }
-    } catch {
-      // keep the list-provided version data on failure
+    } catch (e) {
+      console.debug("[CivBro] selectVersion detail failed:", e);
     }
   }
 
@@ -436,7 +444,9 @@ export function createAppState() {
       const r = await getInstalledVersions();
       installedVersionIds = r?.versionIds || [];
       installedModelIds = new Set(r?.modelIds || []);
-    } catch {}
+    } catch (e) {
+      console.debug("[CivBro] refreshInstalled failed:", e);
+    }
   }
 
   async function refreshFileStatus(versionId: number) {
@@ -493,11 +503,13 @@ export function createAppState() {
     }, 400);
   }
 
+  const MAX_POLL_ITERATIONS = 3600;
   async function pollDownloads() {
     if (dlPolling) return;
     dlPolling = true;
     let stuck = 0;
-    while (dlPolling) {
+    let iterations = 0;
+    while (dlPolling && iterations++ < MAX_POLL_ITERATIONS) {
       const activeIds = Object.keys(downloads).filter((id) => DL_ACTIVE_INTERNAL.includes(downloads[id].status));
       if (activeIds.length === 0) { dlPolling = false; return; }
       await new Promise((r) => setTimeout(r, 1500));
@@ -552,9 +564,9 @@ export function createAppState() {
   async function fetchSuggestions(query: string) {
     if (query.length < 2) { suggestions = []; return; }
     try {
-      const result: any = await searchModels({ query, limit: 5, source: filters.nsfw && apiKey ? "red" : "rest" });
-      const items = result.items || result.models || [];
-      suggestions = items.map((m: CivitaiModel) => m.name).slice(0, 5);
+      const result: any = await getSuggestions(query);
+      const items = result.items || [];
+      suggestions = items.map((m: any) => m.name).slice(0, 5);
     } catch {
       suggestions = [];
     }
@@ -601,7 +613,13 @@ export function createAppState() {
     saveSettings();
   }
 
+  function cleanup() {
+    if (reorderTimer) { clearTimeout(reorderTimer); reorderTimer = null; }
+    dlPolling = false;
+  }
+
   return {
+    cleanup,
     get filters() { return filters; },
     set filters(v) { filters = v; },
     get models() { return models; },
@@ -655,8 +673,9 @@ export function createAppState() {
     set apiKeyValid(v) { apiKeyValid = v; },
     get settingsLoaded() { return settingsLoaded; },
     set settingsLoaded(v) { settingsLoaded = v; },
+    get config() { return config; },
 
-    loadSettings, saveSettings, validateAndSaveKey,
+    loadSettings, loadConfig, saveSettings, validateAndSaveKey,
     fetchModels, loadMore, openModelDetail, closeModelDetail, selectVersion,
     refreshLocalModels, fetchSuggestions, setFilter, clearFilters, triggerSearch,
     toggleModelType, toggleBaseModel,

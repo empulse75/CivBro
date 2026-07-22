@@ -51,19 +51,8 @@
     return null;
   });
 
-  const MODELS_ROOT = "/home/gonzo/webui/sd-webui-forge-classic/models";
-  const DIR_MAP: Record<string, string> = {
-    Checkpoint: "Stable-diffusion",
-    LORA: "Lora", LoCon: "Lora", DoRA: "Lora", LoRA: "Lora",
-    TextualInversion: "embeddings",
-    Hypernetwork: "hypernetworks",
-    VAE: "VAE",
-    Controlnet: "ControlNet",
-    Upscaler: "ESRGAN",
-    MotionModule: "AnimateDiff",
-    Poses: "Poses",
-    Wildcards: "wildcards",
-  };
+  const MODELS_ROOT = $derived(appState.config?.modelsRoot || "");
+  const DIR_MAP = $derived(appState.config?.frontendDirMap || {});
   function subDir(mt: string): string {
     const s = (mt || "").toLowerCase();
     if (s.includes("vae")) return "VAE";
@@ -76,15 +65,19 @@
   let cancelRetry = $state(false);
 
   async function awaitDownload(id: string): Promise<string> {
-    while (true) {
+    const MAX_WAIT_MS = 300_000;
+    let elapsed = 0;
+    while (elapsed < MAX_WAIT_MS) {
       if (cancelRetry) return "cancelled";
       await new Promise((r) => setTimeout(r, 500));
+      elapsed += 500;
       const dl = appState.downloads[id];
       if (!dl) return "gone";
       if (dl.status === "completed") return "completed";
       if (dl.status === "failed") return "failed";
       if (dl.status === "cancelled") return "cancelled";
     }
+    return "timeout";
   }
 
   function removeDownloadEntry(id: string) {
@@ -105,7 +98,9 @@
           try {
             const api = await import("./api");
             await api.deleteDownload(id);
-          } catch {}
+          } catch (e) {
+            console.debug("[CivBro] cardDownload cancel failed:", e);
+          }
         }
       }
       return;
@@ -115,7 +110,9 @@
       try {
         const api = await import("./api");
         await api.deleteLocalModel(model.id);
-      } catch {}
+      } catch (e) {
+        console.debug("[CivBro] cardDownload deleteLocalModel failed:", e);
+      }
       return;
     }
     if (dlBtnBusy) return;
@@ -165,7 +162,9 @@
         if (result === "cancelled") break;
         if (!errMsg.includes("buzz") && !errMsg.includes("unlock")) break;
       }
-    } catch { /* silently fail — user can still open the popup */ }
+    } catch (e) {
+      console.debug("[CivBro] cardDownload failed:", e);
+    }
     dlBtnBusy = false;
   }
 
@@ -344,7 +343,8 @@
       }
     }, { rootMargin: "300px" });
     io.observe(node);
-    node.addEventListener("playing", () => { videoPlaying = true; });
+    const onPlaying = () => { videoPlaying = true; };
+    node.addEventListener("playing", onPlaying);
     node.addEventListener("canplay", play);
     node.addEventListener("loadeddata", play);
 
@@ -353,6 +353,7 @@
         io.disconnect();
         node.removeEventListener("canplay", play);
         node.removeEventListener("loadeddata", play);
+        node.removeEventListener("playing", onPlaying);
         node.pause?.();
       },
     };

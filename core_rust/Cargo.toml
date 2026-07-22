@@ -16,6 +16,7 @@ sha2 = "0.10"
 hex = "0.4"
 blake3 = "1.5"
 walkdir = "2.5"
+regex = "1.11"
 
 # Baremetal optimization (README §13 mandate). LTO/opt-level go in the profile
 # (setting `-C lto` via RUSTFLAGS conflicts with Cargo's per-dep embed-bitcode);

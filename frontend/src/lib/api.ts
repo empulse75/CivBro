@@ -183,3 +183,16 @@ export async function reorderDownloads(order: string[]) {
     body: JSON.stringify({ order }),
   });
 }
+
+export interface FrontendConfig {
+  modelsRoot: string;
+  dirMap: Record<string, string>;
+  frontendDirMap: Record<string, string>;
+}
+
+let _configCache: FrontendConfig | null = null;
+export async function getFrontendConfig(): Promise<FrontendConfig> {
+  if (_configCache) return _configCache;
+  _configCache = await fetchApi<FrontendConfig>("/config");
+  return _configCache!;
+}

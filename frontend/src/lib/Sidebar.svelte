@@ -1,6 +1,7 @@
 <script lang="ts">
   import { appState } from "./stores.svelte.ts";
   import type { CivitaiModel } from "./stores.svelte.ts";
+  import { onDestroy } from "svelte";
 
   interface Props {
     onSelectModel?: (model: CivitaiModel) => void;
@@ -16,6 +17,12 @@
   let apiKeyValidationStatus = $state<"valid" | "invalid" | "checking" | null>(null);
   let keyDebounceTimer: ReturnType<typeof setTimeout>;
   let dragIdx = $state<number | null>(null);
+
+  onDestroy(() => {
+    clearTimeout(debounceTimer);
+    clearTimeout(fuzzyTimer);
+    clearTimeout(keyDebounceTimer);
+  });
 
   const categories = [
     { value: "", label: "All" },
@@ -136,6 +143,8 @@
   function handleSearchKeydown(e: KeyboardEvent) {
     if (e.key === "Enter") {
       clearTimeout(debounceTimer);
+      e.preventDefault();
+      searchInput = (e.target as HTMLInputElement).value;
       appState.setFilter("search", searchInput);
       appState.triggerSearch();
     }
@@ -155,10 +164,12 @@
 
   function handleCategorySelect(value: string) {
     appState.toggleModelType(value);
+    appState.triggerSearch();
   }
 
   function handleBaseModelSelect(value: string) {
     appState.toggleBaseModel(value);
+    appState.triggerSearch();
   }
 
   function chipClass(selected: boolean) {
@@ -177,14 +188,17 @@
 
   function handlePeriodSelect(value: string) {
     appState.setFilter("period", appState.filters.period === value ? "AllTime" : value);
+    appState.triggerSearch();
   }
 
   function handleSortSelect(value: string) {
     appState.setFilter("sort", value);
+    appState.triggerSearch();
   }
 
   function toggleNsfw() {
     appState.setFilter("nsfw", !appState.filters.nsfw);
+    appState.triggerSearch();
   }
 
   function toggleNsfwBlur() {
@@ -433,6 +447,7 @@
       onclick={() => {
         appState.clearFilters();
         searchInput = "";
+        appState.triggerSearch();
       }}
     >
       Clear Filters

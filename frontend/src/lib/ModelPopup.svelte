@@ -15,22 +15,8 @@
 
   let installedSet = $derived(new Set(installedVersionIds));
 
-  const MODELS_ROOT = "/home/gonzo/webui/sd-webui-forge-classic/models";
-  const DIR_MAP: Record<string, string> = {
-    Checkpoint: "Stable-diffusion",
-    LORA: "Lora",
-    LoCon: "Lora",
-    DoRA: "Lora",
-    LoRA: "Lora",
-    TextualInversion: "embeddings",
-    Hypernetwork: "hypernetworks",
-    VAE: "VAE",
-    Controlnet: "ControlNet",
-    Upscaler: "ESRGAN",
-    MotionModule: "AnimateDiff",
-    Poses: "Poses",
-    Wildcards: "wildcards",
-  };
+  const MODELS_ROOT = $derived(appState.config?.modelsRoot || "");
+  const DIR_MAP = $derived(appState.config?.frontendDirMap || {});
 
   // Map a component/file type (or filename) to the correct WebUI subdirectory.
   // Fixes VAE / text-encoder files landing in the checkpoint folder.
@@ -395,9 +381,7 @@
     onClose();
     appState.setFilter("search", tag);
     appState.setFilter("modelType", modelType);
-    // Clear other filters to maximize results — only the type + the tag search matter.
     (appState.filters as any).baseModel = [];
-    (appState.filters as any).nsfw = (model as any).nsfw || appState.filters.nsfw;
     (appState.filters as any).sort = "Most Downloaded";
     (appState.filters as any).period = "AllTime";
     appState.triggerSearch();
