@@ -45,7 +45,10 @@ export function createDownloadStore(
   }): Promise<string | null> {
     const res: any = await downloadModel(params);
     const id = res?.id;
-    if (!id) return null;
+    if (!id) {
+      console.error("[CivBro] downloadModel returned no id — download not queued in frontend");
+      return null;
+    }
     downloads = {
       ...downloads,
       [id]: { fileId: params.fileId ?? null, versionId: params.versionId, modelId: params.modelId, fileName: params.fileName, status: "queued", progress: 0 },

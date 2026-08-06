@@ -150,6 +150,7 @@ async def _save_download_sidecar(
 async def _process_download(download_id: str) -> None:
     entry = next((d for d in _download_queue if d["id"] == download_id), None)
     if entry is None:
+        logger.warning(f"Download {download_id}: entry vanished from queue before processing — skipping")
         await schedule_downloads()
         return
 

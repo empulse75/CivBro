@@ -69,7 +69,10 @@ def register_download_routes(app: Any) -> None:
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
-        await schedule_downloads()
+        try:
+            await schedule_downloads()
+        except Exception as e:
+            logger.warning(f"schedule_downloads failed for {entry['id']}: {e} — entry remains pending, will retry")
         return entry
 
     @app.get(f"{PREFIX}/download/queue")
