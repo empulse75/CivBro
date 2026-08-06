@@ -10,7 +10,22 @@ __pycache__/
 # Local runtime data & logs
 civbro.db
 *.db
+*.db-shm
+*.db-wal
 *.log
 .DS_Store
 .vscode/
 .idea/
+
+# Native binary (built per-machine)
+*.so
+*.so.*
+
+# Frontend build output (built per-deploy)
+dist/
+**/dist/
+
+# Ignore any dotenv / secrets files
+.env
+.env.*
+*.secret
