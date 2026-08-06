@@ -27,7 +27,7 @@ export function createLocalStore() {
       const result = (await getLocalModels()) as { items?: LocalModel[] };
       localModels = result?.items || [];
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to load local models";
+      console.warn("[CivBro] refreshLocalModels failed:", e);
     }
   }
 

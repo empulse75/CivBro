@@ -387,8 +387,8 @@ def recover_stale_downloads() -> int:
             )
             if part_path.exists():
                 part_path.unlink()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"failed to clean up stale download {r.get('id', '?')}: {e}")
         entry = {
             "id": r.get("id", ""),
             "modelId": r.get("modelId"),

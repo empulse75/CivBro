@@ -2,6 +2,11 @@
   import { appState } from "./stores.svelte.ts";
   import type { CivitaiModel, ModelVersion, ModelFile } from "./stores.svelte.ts";
   import { getModel } from "./api.ts";
+  import { getCardDownloadStatus } from "./card-download-status";
+  import { isNsfwImage } from "./browse";
+  import { fmtCount } from "./format.ts";
+  import { subdirForType } from "./paths.ts";
+  import DownloadButton from "./DownloadButton.svelte";
 
   interface Props {
     model: CivitaiModel;
@@ -16,12 +21,26 @@
   // exactly like Civitai. Applied inline via padding-box/border-box.
   let frame = $derived(model.cosmetic?.cssFrame || "");
   let frameGlow = $derived(model.cosmetic?.glow ?? false);
+  let lightTextureStyle = $derived.by(() => {
+    const cosmetic = model.cosmetic;
+    if (cosmetic?.type !== "holiday-lights" || !cosmetic.textureUrl) return "";
+    const width = cosmetic.textureWidth || 14;
+    const height = cosmetic.textureHeight || 14;
+    const colors: Record<string, string> = {
+      green: "#4f7a43",
+      yellow: "#d5a921",
+      red: "#b83d3d",
+      blue: "#366eb5",
+      white: "#d9e2ec",
+    };
+    const color = colors[(cosmetic.color || "").toLowerCase()] || "#d9e2ec";
+    return `--light-texture:url('${cosmetic.textureUrl}');--light-size:${width}px ${height}px;--light-brightness:${cosmetic.brightness ?? 1};--light-color:${color};`;
+  });
   let cardStyle = $derived.by(() => {
     const base = "aspect-ratio:7/9; content-visibility:auto; contain-intrinsic-size:285px 366px;";
     if (frame) {
-      // Cosmetic gradient border only — NO box-shadow of any kind (per design,
-      // the only shadow allowed anywhere is text-shadow for readability).
-      return base + `border:5px solid transparent; border-radius:12px; background: linear-gradient(#1a1b1e,#1a1b1e) padding-box, ${frame} border-box;`;
+      const glow = frameGlow ? `box-shadow:0 0 4px 1px rgba(255,255,255,0.12);` : "";
+      return `${base}border:6px solid transparent; border-radius:8px; background: linear-gradient(#1a1b1e,#1a1b1e) padding-box, ${frame} border-box;${glow}`;
     }
     return base;
   });
@@ -51,16 +70,30 @@
     return null;
   });
 
+  let dlStatus = $derived.by(() => getCardDownloadStatus({
+    activeStatus: cardDl?.status ?? null,
+    busy: dlBtnBusy,
+    installed: modelHasInstalled,
+    buzzRequired: model.hasBuzz === true,
+    buzzUnlocked: appState.unlockedBuzzModelIds.has(model.id),
+    earlyAccess: model.availability === "EarlyAccess",
+    modelNsfw: model.nsfw === true,
+    nsfwBrowsing: appState.filters.nsfw,
+    apiKeyConfigured: appState.apiKeyConfigured,
+  }));
+
+  let dlLabel = $derived.by(() => {
+    if (dlStatus === "active") return "Click to cancel download";
+    if (dlStatus === "buzzLocked") return "Buzz required — purchase on civitai.com";
+    if (dlStatus === "buzzUnlocked") return "Buzz purchase unlocked — click to download";
+    if (dlStatus === "apikeyLocked") return "API key required — add one in sidebar";
+    if (dlStatus === "installed" || dlStatus === "completed") return "Click to delete local copy";
+    return `Download ${model.name}`;
+  });
+
   const MODELS_ROOT = $derived(appState.config?.modelsRoot || "");
   const DIR_MAP = $derived(appState.config?.frontendDirMap || {});
-  function subDir(mt: string): string {
-    const s = (mt || "").toLowerCase();
-    if (s.includes("vae")) return "VAE";
-    if (s.includes("encoder") || s === "te") return "text_encoder";
-    if (s.includes("lora") || s.includes("locon")) return "Lora";
-    if (s.includes("embed") || s.includes("textualinversion")) return "embeddings";
-    return DIR_MAP[mt] || "Stable-diffusion";
-  }
+  function subDir(mt: string): string { return subdirForType(mt, DIR_MAP); }
 
   let cancelRetry = $state(false);
 
@@ -89,6 +122,10 @@
 
   async function cardDownload(e: Event) {
     e.stopPropagation();
+    if (dlStatus === "buzzLocked" || dlStatus === "apikeyLocked") {
+      window.open(`https://civitai.com/models/${model.id}`, "_blank");
+      return;
+    }
     // If already downloading, cancel it. If installed, delete the local file.
     if (cardDl && (cardDl.status === "pending" || cardDl.status === "queued" || cardDl.status === "downloading")) {
       cancelRetry = true;
@@ -98,8 +135,8 @@
           try {
             const api = await import("./api");
             await api.deleteDownload(id);
-          } catch (e) {
-            console.debug("[CivBro] cardDownload cancel failed:", e);
+        } catch (e) {
+          console.warn("[CivBro] cardDownload cancel failed:", e);
           }
         }
       }
@@ -148,6 +185,8 @@
           downloadUrl: pf.downloadUrl!,
           downloadDir: dir,
           fileName: pf.name,
+          fileType: pf.type,
+          modelType: detail?.modelType || detail?.type || model.type,
           sizeKB: pf.sizeKB,
         });
         if (!dlId) continue;
@@ -178,10 +217,7 @@
     }
     return null;
   }
-  // Civitai nsfwLevel: 1=PG, 2=PG13(Soft), 4=R(Mature), 8=X, 16=XXX, 32=Blocked.
-  // Civitai blurs Mature (R) and above for the default browsing level.
-  let previewNsfwLevel = $derived((primaryImageObj()?.nsfwLevel ?? 0) as number);
-  let shouldBlur = $derived(appState.nsfwBlurEnabled && previewNsfwLevel >= 4 && !imageRevealed);
+  let shouldBlur = $derived(appState.nsfwBlurEnabled && isNsfwImage(primaryImageObj() || {}) && !imageRevealed);
 
   function getPrimaryImage(): string {
     if (model.images && model.images.length > 0) {
@@ -213,7 +249,7 @@
 
   let downloadCount = $derived(
     model.stats?.downloadCount != null
-      ? formatCount(model.stats.downloadCount)
+      ? fmtCount(model.stats.downloadCount)
       : ""
   );
 
@@ -299,12 +335,6 @@
     return "";
   });
 
-  function formatCount(count: number): string {
-    if (count >= 1000000) return (count / 1000000).toFixed(1) + "M";
-    if (count >= 1000) return (count / 1000).toFixed(1) + "k";
-    return String(count);
-  }
-
   function handleClick() {
     if (shouldBlur) {
       imageRevealed = true;
@@ -348,8 +378,9 @@
       }
     }, { rootMargin: "400px" });
     io.observe(node);
+    const handlePause = () => { videoPlaying = false; };
     node.addEventListener("playing", updatePlaying);
-    node.addEventListener("pause", () => { videoPlaying = false; });
+    node.addEventListener("pause", handlePause);
     node.addEventListener("canplay", play);
     node.addEventListener("loadeddata", play);
 
@@ -359,7 +390,7 @@
         node.removeEventListener("canplay", play);
         node.removeEventListener("loadeddata", play);
         node.removeEventListener("playing", updatePlaying);
-        node.removeEventListener("pause", updatePlaying);
+        node.removeEventListener("pause", handlePause);
         node.pause?.();
       },
     };
@@ -368,17 +399,21 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
 <div
-  class="civ-card group relative overflow-hidden cursor-pointer"
-  style={cardStyle}
+  class="civ-card group relative overflow-clip cursor-pointer"
+  style={`${cardStyle}${lightTextureStyle}`}
   onclick={handleClick}
   data-testid="model-card"
   data-base-model={model.baseModel || ""}
   data-cosmetic={frame ? "1" : "0"}
 >
+  {#if lightTextureStyle}
+    <div class="holiday-lights" aria-hidden="true"></div>
+  {/if}
+
   {#if imageUrl && !imageError}
     {#if getPrimaryImageType() === "video"}
       <video
-        class="civ-card-media absolute inset-0 w-full h-full object-cover transition-all duration-300
+        class="civ-card-media absolute inset-0 w-full h-full object-cover object-top transition-all duration-300
           {shouldBlur ? 'blur-[12px] scale-110' : 'blur-0 scale-100'}"
         use:bgAutoVideo={imageUrl}
         poster={model.poster || undefined}
@@ -397,7 +432,7 @@
       {/if}
     {:else}
       <img
-        class="civ-card-media absolute inset-0 w-full h-full object-cover transition-all duration-300
+        class="civ-card-media absolute inset-0 w-full h-full object-cover object-top transition-all duration-300
           {shouldBlur ? 'blur-[12px] scale-110' : 'blur-0 scale-100'}"
         src={imageUrl}
         alt={model.name}
@@ -435,7 +470,7 @@
         <span>{typeLabel}</span>
         {#if familyItems.length}
           <span class="opacity-30">&nbsp;|&nbsp;</span>
-          {#each familyItems as f, i}
+          {#each familyItems as f, i (f.label || 'family-' + i)}
             {#if i > 0}<span class="opacity-50">,&nbsp;</span>{/if}
             {#if f.pony}
               <svg class="w-[18px] h-[18px] inline-block -my-px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Pony"><title>Pony</title><path d="M7 10l-.85 8.507a1.357 1.357 0 0 0 1.35 1.493h.146a2 2 0 0 0 1.857 -1.257l.994 -2.486a2 2 0 0 1 1.857 -1.257h1.292a2 2 0 0 1 1.857 1.257l.994 2.486a2 2 0 0 0 1.857 1.257h.146a1.37 1.37 0 0 0 1.364 -1.494l-.864 -9.506h-8c0 -3 -3 -5 -6 -5l-3 6l2 2l3 -2z"/><path d="M22 14v-2a3 3 0 0 0 -3 -3"/></svg>
@@ -447,11 +482,6 @@
         {/if}
       </span>
     {/if}
-    {#if model.hasBuzz}
-      <span class="inline-flex items-center gap-1 text-[14px] font-bold uppercase tracking-wide bg-amber-400/15 border border-amber-400/40 text-amber-300 rounded-full" style="padding:4px 10px;line-height:18px">
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Buzz
-      </span>
-    {/if}
     {#if isEarlyAccess}
       <span class="inline-flex items-center text-[14px] font-bold uppercase tracking-wide text-white bg-[#3acd84] rounded-full" style="padding:4px 10px;line-height:18px">Early Access</span>
     {:else if isUpdated}
@@ -461,52 +491,30 @@
 
   <!-- download button top-right -->
   <div class="absolute top-2 right-2 z-10">
-    <div
-      class="w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm border border-white/10 text-white flex items-center justify-center transition-all cursor-pointer
-        {cardDl?.status === 'downloading' || cardDl?.status === 'pending' || cardDl?.status === 'queued' || dlBtnBusy
-          ? 'hover:bg-[#e03131] hover:border-[#e03131] hover:text-white'
-          : (modelHasInstalled || cardDl?.status === 'completed'
-              ? 'border-[#22c55e] text-[#22c55e] hover:bg-[#dc2626] hover:border-[#dc2626] hover:text-white'
-              : 'hover:bg-[#2563eb] hover:border-[#2563eb]')}"
-      onclick={cardDownload}
-      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); cardDownload(e); } }}
-      role="button"
-      tabindex="0"
-      aria-label={`Download ${model.name}`}
-      title={cardDl?.status === 'downloading' || cardDl?.status === 'pending' || cardDl?.status === 'queued' ? 'Click to cancel download' : (modelHasInstalled ? 'Click to delete local copy' : 'Download latest version')}
-    >
-      {#if dlBtnBusy || cardDl?.status === "pending" || cardDl?.status === "queued" || cardDl?.status === "downloading"}
-        <!-- spinner by default, X on hover (via CSS group-hover swap) -->
-        <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.2-8.6"/></svg>
-      {:else if cardDl?.status === "completed" || modelHasInstalled}
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-      {:else}
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
-      {/if}
-    </div>
+    <DownloadButton status={dlStatus} label={dlLabel} onclick={cardDownload} />
   </div>
 
   <div
-    class="absolute bottom-0 left-0 right-0 px-2 pt-2 pb-2 pointer-events-none"
+    class="creator-strip absolute bottom-0 left-0 right-0 pointer-events-none"
   >
     <div class="flex items-center gap-2 mb-1">
-      <div class="relative shrink-0" style="width:32px;height:32px;">
+      <div class="relative shrink-0" style="width:38.4px;height:38.4px;">
         {#if model.creator?.image}
           <img
             class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full object-cover border border-white/25"
-            style="width:32px;height:32px;"
+            style="width:38.4px;height:38.4px;"
             src={model.creator.image}
             alt={model.creator.username}
           />
         {:else}
-          <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#2a2b30] flex items-center justify-center text-[14px] text-gray-300 border border-white/25" style="width:32px;height:32px;">
+          <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#2a2b30] flex items-center justify-center text-[14px] text-gray-300 border border-white/25" style="width:38.4px;height:38.4px;">
             {model.creator?.username?.charAt(0)?.toUpperCase() || "?"}
           </div>
         {/if}
         {#if model.avatarDeco}
           <div
             class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
-            style="width:38px;height:38px;"
+            style="width:45.6px;height:45.6px;"
           >
             <img
               style="width:100%;height:100%;object-fit:contain;"
@@ -525,7 +533,7 @@
       </span>
       {#if model.badge}
         <img
-          class="h-[28px] w-auto shrink-0"
+          class="h-[33.6px] w-auto shrink-0"
           style="object-fit:contain;"
           src={model.badge}
           alt=""
@@ -547,28 +555,109 @@
         {#if collections > 0}
           <span class="inline-flex items-center gap-0.5">
             <svg class="w-[16px] h-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
-            {formatCount(collections)}
+            {fmtCount(collections)}
           </span>
         {/if}
         {#if comments > 0}
           <span class="inline-flex items-center gap-0.5">
             <svg class="w-[16px] h-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
-            {formatCount(comments)}
+            {fmtCount(comments)}
           </span>
         {/if}
         {#if buzz > 0}
           <span class="inline-flex items-center gap-0.5">
             <svg class="w-[14px] h-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            {formatCount(buzz)}
+            {fmtCount(buzz)}
           </span>
         {/if}
       </div>
       {#if likes > 0}
         <div class="inline-flex items-center gap-1 bg-black/35 rounded-full text-[#fd7f38] text-[14px] font-bold" style="padding:4px 10px;line-height:18px">
           <svg class="w-[14px] h-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/></svg>
-          {formatCount(likes)}
+          {fmtCount(likes)}
         </div>
       {/if}
     </div>
   </div>
 </div>
+
+<style>
+  .civ-card {
+    isolation: isolate;
+    transition: transform 260ms cubic-bezier(.2,.8,.2,1), box-shadow 260ms ease;
+  }
+
+  .creator-strip {
+    padding: 8px 14px 14px;
+  }
+
+  .civ-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 21;
+    padding: 3px;
+    border-radius: inherit;
+    opacity: 0;
+    --halo-angle: 0deg;
+    background: conic-gradient(from var(--halo-angle), transparent 0 8%, #55d7ff 15%, #fff 23%, #a855f7 34%, transparent 45% 58%, #ffd166 68%, #ff4ecd 78%, #4de7ff 90%, transparent 100%);
+    filter: saturate(1.5) brightness(1.4) drop-shadow(0 0 10px rgb(85 215 255 / .9));
+    pointer-events: none;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+  }
+
+  .civ-card:hover {
+    z-index: 30;
+    transform: translateY(-10px) scale(1.018);
+    box-shadow: 0 20px 34px rgb(0 0 0 / .55), 0 0 28px rgb(78 197 255 / .35);
+  }
+
+  .civ-card:hover::after {
+    opacity: 1;
+    animation: card-halo-spin 1.35s linear infinite;
+  }
+
+  @keyframes card-halo-spin {
+    to { --halo-angle: 360deg; }
+  }
+
+  @property --halo-angle {
+    syntax: "<angle>";
+    inherits: false;
+    initial-value: 0deg;
+  }
+
+  .holiday-lights {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    padding: 6px;
+    border-radius: 8px;
+    filter: brightness(var(--light-brightness));
+    pointer-events: none;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+  }
+
+  .holiday-lights::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--light-color);
+    -webkit-mask-image: var(--light-texture);
+    -webkit-mask-repeat: repeat;
+    -webkit-mask-size: var(--light-size);
+    mask-image: var(--light-texture);
+    mask-repeat: repeat;
+    mask-size: var(--light-size);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .civ-card, .civ-card::after { transition: none; animation: none !important; }
+  }
+</style>

@@ -22,8 +22,8 @@ def _shutdown():
             import httpx
             try:
                 asyncio.run(HTTP_CLIENT.aclose())
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"HTTP client shutdown failed: {e}")
 
 
 def register_routes(app: Any) -> None:

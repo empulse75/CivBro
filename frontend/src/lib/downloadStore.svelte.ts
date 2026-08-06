@@ -74,7 +74,7 @@ export function createDownloadStore(
     if (!active.length) return;
     reorderTimer = setTimeout(async () => {
       const current = downloadOrder.filter(id => downloads[id] && DL_ACTIVE_INTERNAL.includes(downloads[id].status));
-      try { await apiReorder(current); } catch {}
+      try { await apiReorder(current); } catch (e) { console.warn("[CivBro] reorder sync failed:", e); }
     }, 400);
   }
 
@@ -89,7 +89,7 @@ export function createDownloadStore(
       if (activeIds.length === 0) { dlPolling = false; return; }
       await new Promise((r) => setTimeout(r, 1500));
       let items: any;
-      try { items = await getDownloadQueue(); } catch { stuck++; if (stuck > 5) { dlPolling = false; return; } continue; }
+      try { items = await getDownloadQueue(); } catch { stuck++; if (stuck > 5) { dlPolling = false; console.error("[CivBro] pollDownloads: 5 consecutive failures — polling stopped"); return; } continue; }
       stuck = 0;
       const list = (items?.items || items || []) as any[];
       const next = { ...downloads };

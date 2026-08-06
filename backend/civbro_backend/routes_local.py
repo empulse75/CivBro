@@ -101,7 +101,8 @@ def register_local_routes(app: Any) -> None:
                 for info in root.rglob("*.civitai.info"):
                     try:
                         data = json.loads(info.read_text(encoding="utf-8"))
-                    except Exception:
+                    except Exception as e:
+                        logger.debug(f"corrupt sidecar {info}: {e}")
                         continue
                     vid = data.get("id")
                     mid = data.get("modelId")
@@ -133,6 +134,7 @@ def register_local_routes(app: Any) -> None:
                         rel = p.relative_to(root)
                         top = rel.parts[0] if rel.parts else ""
                     except Exception:
+                        logger.debug(f"unexpected path for {p} inside {root}")
                         top = ""
                     mtype = TYPE_BY_DIR.get(top, top or "Other")
                     name = p.stem
@@ -155,11 +157,12 @@ def register_local_routes(app: Any) -> None:
                             mname = (info.get("model") or {}).get("name")
                             if mname:
                                 name = mname
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug(f"failed to read sidecar {sidecar}: {e}")
                     try:
                         size = p.stat().st_size
-                    except Exception:
+                    except Exception as e:
+                        logger.debug(f"stat failed for {p}: {e}")
                         size = 0
                     idc += 1
                     items.append({

@@ -36,6 +36,7 @@ def register_download_routes(app: Any) -> None:
             body = await request.json()
             set_throttle(body.get("enable", True))
         except Exception:
+            logger.debug("throttle endpoint received invalid JSON — enabling throttle")
             set_throttle(True)
         return {"throttled": get_throttle_until() > time.time()}
 

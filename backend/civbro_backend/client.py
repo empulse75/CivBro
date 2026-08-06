@@ -114,8 +114,8 @@ async def _warm_connections() -> None:
                 params=params,
                 timeout=httpx.Timeout(connect=8.0, read=20.0, write=10.0, pool=20.0),
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"warmup ping failed: {e}")
 
     targets: list[tuple[str, dict]] = [
         (f"{CIVITAI_REST_API}/models", {"limit": 1}),
@@ -134,7 +134,10 @@ async def _warm_connections() -> None:
 
 async def _warmup_loop() -> None:
     while True:
-        await _warm_connections()
+        try:
+            await _warm_connections()
+        except Exception as e:
+            logger.warning(f"warmup loop iteration failed: {e}")
         await asyncio.sleep(WARMUP_INTERVAL)
 
 

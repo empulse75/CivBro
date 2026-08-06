@@ -98,8 +98,8 @@ def register_model_routes(app: Any) -> None:
                                 ea_models.append(make_slim_from_trpc(ex, int(mid)))
                         if ea_models:
                             result["items"] = ea_models + result["items"]
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"[CivBro] tRPC extras enrichment failed: {e}")
 
                 search_cache_put(cache_key, result)
                 return result

@@ -81,11 +81,9 @@ export function createBrowseStore(
             if (e.createdAt && !m.createdAt) m.createdAt = e.createdAt;
             if (e.mode && !m.mode) m.mode = e.mode;
           }
-        } catch (e) { console.debug("[CivBro] extras chunk failed:", e); }
+        } catch (e) { console.warn("[CivBro] extras chunk failed:", e); }
       }
-    } catch (e) {
-      console.debug("[CivBro] extras load failed:", e);
-    }
+      } catch (e) { console.warn("[CivBro] extras load failed:", e); }
   }
 
   async function fetchModels(reset = false) {
@@ -211,7 +209,7 @@ export function createBrowseStore(
         modelVersions = modelVersions.map((mv) => (mv.id === v.id ? merged : mv));
       }
     } catch (e) {
-      console.debug("[CivBro] selectVersion detail failed:", e);
+      console.warn("[CivBro] selectVersion detail failed:", e);
     }
   }
 
