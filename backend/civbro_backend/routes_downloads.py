@@ -18,6 +18,7 @@ from .downloads import (
     schedule_downloads,
     set_throttle,
     resolve_download_path,
+    _schedule_lock,
 )
 from . import config
 from .client import DB
@@ -92,15 +93,15 @@ def register_download_routes(app: Any) -> None:
         if entry is None:
             raise HTTPException(status_code=404, detail="Download not found")
 
-        if entry["status"] in ("pending", "downloading"):
-            entry["status"] = "cancelled"
-            entry["updatedAt"] = time.time()
-            if DB is not None:
-                try:
-                    DB.update_download_status(download_id, "cancelled")
-                except Exception as e:
-                    logger.debug(f"Failed to update download status: {e}")
-
-        await remove_entry(download_id)
+        async with _schedule_lock:
+            if entry["status"] in ("pending", "downloading"):
+                entry["status"] = "cancelled"
+                entry["updatedAt"] = time.time()
+                if DB is not None:
+                    try:
+                        DB.update_download_status(download_id, "cancelled")
+                    except Exception as e:
+                        logger.debug(f"Failed to update download status: {e}")
+            await remove_entry(download_id)
         await schedule_downloads()
         return {"status": "cancelled"}

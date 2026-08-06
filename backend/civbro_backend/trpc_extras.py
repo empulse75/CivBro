@@ -6,7 +6,7 @@ import time
 from typing import Any
 
 from .client import DB, http_get_with_retry
-from .config import CIVITAI_TRPC_API, CIVITAI_REST_API, COSMETIC_CACHE_TTL, EXCLUDED_TAG_IDS, EXTRAS_ID_TTL
+from .config import CIVITAI_TRPC_API, CIVITAI_REST_API, COSMETIC_CACHE_TTL, EXCLUDED_TAG_IDS, EXTRAS_ID_TTL, TRPC_EXTRAS_MAX_PAGES
 from .rust_facade import apply_extras_to_slim, extract_trpc_extras, make_slim_from_trpc, parse_dependencies, parse_trpc_items
 
 logger = logging.getLogger("civbro.api")
@@ -68,7 +68,7 @@ async def fetch_trpc_extras(
     out: dict = {}
     try:
         cursor = None
-        for _ in range(20):
+        for _ in range(TRPC_EXTRAS_MAX_PAGES):
             req_inp = {k: dict(v) if isinstance(v, dict) else v for k, v in inp.items()}
             if cursor is not None:
                 req_inp["json"]["cursor"] = cursor
