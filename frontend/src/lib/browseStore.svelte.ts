@@ -254,6 +254,7 @@ export function createBrowseStore(
     set isLoading(v: boolean) { isLoading = v; },
     get isLoadingMore() { return isLoadingMore; },
     get error() { return error; },
+    set error(v: string | null) { error = v; },
     get page() { return page; },
     get hasMore() { return hasMore; },
     get suggestions() { return suggestions; },
