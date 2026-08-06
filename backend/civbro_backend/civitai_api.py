@@ -18,8 +18,7 @@ from .config import (
     DEFAULT_LIMIT,
     EXCLUDED_TAG_IDS,
 )
-from .parsing import parse_model_slim, parse_trpc_model
-from .rust_facade import parse_trpc_items
+from .rust_facade import parse_model_slim, parse_trpc_model, parse_trpc_items
 from .trpc_extras import _trpc_client_headers
 
 logger = logging.getLogger("civbro.api")

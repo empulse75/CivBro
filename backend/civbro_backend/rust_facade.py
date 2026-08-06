@@ -93,3 +93,28 @@ def make_slim_from_trpc(extras: dict, model_id: int) -> dict:
 def parse_dependencies(trpc: dict) -> list[dict]:
     core = _ensure_rust()
     return json.loads(core.parse_deps(json.dumps(trpc)))
+
+
+# ── additional Rust wrappers ─────────────────────────────────────────────────
+
+def scan_model_dir(dir_path: str, extensions: list[str]) -> list[dict]:
+    core = _ensure_rust()
+    result = core.scan_model_dir(dir_path, extensions)
+    return json.loads(result) if isinstance(result, str) else result
+
+
+def build_version_list(raw_json: str) -> list[dict]:
+    core = _ensure_rust()
+    return json.loads(core.build_version_list(raw_json))
+
+
+def build_version_detail(data_json: str, trpc_json: str) -> dict:
+    core = _ensure_rust()
+    return json.loads(core.build_version_detail(data_json, trpc_json))
+
+
+def compute_file_hash(path: str, algorithm: str = "sha256") -> str:
+    if not RUST_AVAILABLE:
+        return ""
+    import civbro_core
+    return civbro_core.compute_file_hash(path, algorithm)
