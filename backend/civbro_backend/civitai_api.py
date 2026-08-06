@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 from fastapi import HTTPException
 
-from .client import RUST_AVAILABLE, get_civitai_key, get_http_client, http_get_with_retry
+from .client import get_civitai_key, get_http_client, http_get_with_retry
 from .config import (
     CIVITAI_RED_API,
     CIVITAI_REST_API,

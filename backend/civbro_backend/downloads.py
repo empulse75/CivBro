@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from . import config
-from .client import DB, RUST_AVAILABLE, get_http_client, get_civitai_key, http_get_with_retry
+from .client import DB, get_http_client, get_civitai_key, http_get_with_retry
 from .config import (
     CIVITAI_REST_API,
     LARGE_THRESHOLD_KB,
