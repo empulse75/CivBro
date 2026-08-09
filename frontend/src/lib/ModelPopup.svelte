@@ -1,6 +1,21 @@
 <script lang="ts">
+  import DOMPurify from "dompurify";
   import { appState } from "./stores.svelte.ts";
-  import type { CivitaiModel, ModelVersion, ModelFile, ModelDependency } from "./stores.svelte.ts";
+  import type { CivitaiModel, ModelVersion, ModelFile, ModelDependency } from "./stores/types";
+  import { fmtCount, fmtSize, fmtSpeed, fmtEta, fmtAgo } from "./format.ts";
+  import { subdirForFile, subdirForType, imgSrc } from "./paths.ts";
+  import PopupLightbox from "./PopupLightbox.svelte";
+  import PopupGallery from "./PopupGallery.svelte";
+  import PopupCarousel from "./PopupCarousel.svelte";
+  import CreatorCard from "./CreatorCard.svelte";
+  import { getModelComments, getSuggestedResources } from "./api.ts";
+
+  function sanitizeHtml(dirty: string): string {
+    return DOMPurify.sanitize(dirty, {
+      ALLOWED_TAGS: ["a","b","i","em","strong","p","br","ul","ol","li","h1","h2","h3","h4","h5","h6","blockquote","pre","code","img","hr","span","div","table","thead","tbody","tr","th","td","caption","colgroup","col","sup","sub","del","s","u","details","summary"],
+      ALLOWED_ATTR: ["href","target","rel","src","alt","width","height","title","class","id","style","colspan","rowspan","scope"],
+    });
+  }
 
   interface Props {
     model: CivitaiModel;
@@ -20,27 +35,12 @@
 
   // Map a component/file type (or filename) to the correct WebUI subdirectory.
   // Fixes VAE / text-encoder files landing in the checkpoint folder.
-  function subdirForType(t: string): string {
-    const s = (t || "").toLowerCase();
-    if (s.includes("vae")) return "VAE";
-    if (s.includes("encoder") || s.includes("text encoder") || s === "te") return "text_encoder";
-    if (s.includes("lora") || s.includes("locon") || s.includes("dora")) return "Lora";
-    if (s.includes("embed") || s.includes("textualinversion")) return "embeddings";
-    if (s.includes("controlnet")) return "ControlNet";
-    if (s.includes("upscal") || s.includes("esrgan")) return "ESRGAN";
-    if (s.includes("checkpoint")) return "Stable-diffusion";
-    return "";
-  }
+  function subDir(t: string): string { return subdirForType(t, DIR_MAP); }
   function fileTargetDir(file: ModelFile): string {
-    const byType = subdirForType(file.type || "");
-    if (byType && byType !== "Stable-diffusion") return byType;
-    const n = (file.name || "").toLowerCase();
-    if (/(^|[_\-.])vae([_\-.]|$)/.test(n)) return "VAE";
-    if (/text.?encoder|(^|[_\-.])te([_\-.]|$)|(^|[_\-.])txt([_\-.]|$)|t5xxl|clip[_\-]?[lg]/.test(n)) return "text_encoder";
-    return DIR_MAP[modelType] || byType || "Stable-diffusion";
+    return subdirForFile(file.type || "", file.name || "", modelType, DIR_MAP);
   }
   function depDir(dep: ModelDependency): string {
-    const byType = subdirForType(dep.type || "");
+    const byType = subDir(dep.type || "");
     if (byType) return byType;
     const n = (dep.name || dep.modelName || "").toLowerCase();
     if (/vae/.test(n)) return "VAE";
@@ -48,35 +48,77 @@
     return "Stable-diffusion";
   }
 
+  let activeImg = $state(0);
   let showLb = $state(false);
   let lbIdx = $state(0);
-  let activeImg = $state(0);
+  let galleryVisible = $state(12);
+  let galSentinel = $state<HTMLDivElement | null>(null);
   // Per-download state lives in the global store so progress persists across popup
   // open/close. See appState.downloads / queueDownload / pollDownloads.
   interface DlState { fileId: number | null; versionId: number; status: string; progress: number; bytesDownloaded?: number; bytesTotal?: number; speed?: number; etaSec?: number; error?: string }
   let copied = $state("");
-  let carouselEl = $state<HTMLDivElement | null>(null);
+  let comments = $state<Array<{id: number; content: string; createdAt: string; user: {username: string; image?: string} | null}>>([]);
+  let commentsCursor = $state<string | null>(null);
+  let commentsLoading = $state(false);
+  let suggestions = $state<Array<{id: number; name: string; type: string; nsfw: boolean; stats: Record<string,number>; images: Array<{url: string; type: string}>}>>([]);
 
-  let galleryImages = $derived.by(() => {
-    const src = selectedVersion?.images?.length
-      ? selectedVersion.images
-      : Array.isArray(model.images)
-        ? model.images
-        : [];
-    const seen = new Set<string>();
-    const out: any[] = [];
-    for (const img of src) {
-      if (img?.url && !seen.has(img.url)) {
-        seen.add(img.url);
-        out.push(img);
-      }
+  async function loadComments() {
+    try {
+      const r = await getModelComments(model.id);
+      comments = r.comments || [];
+      commentsCursor = r.nextCursor || null;
+    } catch {}
+  }
+  async function loadMoreComments() {
+    if (!commentsCursor || commentsLoading) return;
+    commentsLoading = true;
+    try {
+      const r = await getModelComments(model.id, commentsCursor);
+      comments = [...comments, ...(r.comments || [])];
+      commentsCursor = r.nextCursor || null;
+    } catch {}
+    commentsLoading = false;
+  }
+
+  $effect(() => {
+    if (model?.id) {
+      loadComments();
+      getSuggestedResources(model.id).then(r => { suggestions = r.items || []; }).catch(() => {});
     }
-    return out;
   });
 
-  // Enlarged row slides so the selected image is always shown (clamped to the end).
-  let pageStart = $derived(Math.max(0, Math.min(activeImg, galleryImages.length - 4)));
-  let heroImages = $derived(galleryImages.slice(pageStart, pageStart + 4));
+  let galleryImages = $derived.by(() => {
+    const all: any[] = [];
+    const seen = new Set<string>();
+    const collect = (imgs: any[]) => {
+      for (const img of imgs) {
+        if (img?.url && !seen.has(img.url)) {
+          seen.add(img.url);
+          all.push(img);
+        }
+      }
+    };
+    if (selectedVersion?.images) collect(selectedVersion.images);
+    for (const v of versions) {
+      if (v.id !== selectedVersion?.id && v.images) collect(v.images);
+    }
+    return all;
+  });
+
+  $effect(() => {
+    if (!galSentinel) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && galleryVisible < galleryImages.length) {
+          galleryVisible += 12;
+        }
+      },
+      { rootMargin: "200px" }
+    );
+    obs.observe(galSentinel);
+    return () => obs.disconnect();
+  });
+
 
   let files = $derived<ModelFile[]>((selectedVersion?.files as ModelFile[]) || []);
   // Civitai groups a version's files: the actual model checkpoint(s)/LoRA go in the
@@ -105,10 +147,13 @@
   let componentFiles = $derived(files.filter((f) => isComponentType(f.type)));
   let modelType = $derived(model.type || (model as any).modelType || "");
   let isBuzzModel = $derived.by(() => {
-    if ((model as any).hasBuzz === true) return true;
-    if ((model as any).availability === 'EarlyAccess') return true;
     if (selectedVersion && (selectedVersion as any).availability === 'EarlyAccess') return true;
     if (selectedVersion && (selectedVersion as any).buzzCost > 0) return true;
+    return false;
+  });
+  let anyVersionBuzz = $derived.by(() => {
+    if ((model as any).hasBuzz === true) return true;
+    if ((model as any).availability === 'EarlyAccess') return true;
     return versions.some((v: any) => v.availability === 'EarlyAccess');
   });
   let isGenerationOnly = $derived.by(() => {
@@ -150,149 +195,13 @@
     return { label, total, positive: r >= 0.7 };
   });
 
-  function fmtN(n: number | undefined) {
-    if (n == null) return "0";
-    if (n >= 1e3) return (n / 1e3).toFixed(1) + "k";
-    return String(n || 0);
-  }
   function fmtS(kb: number) {
     if (!kb) return "";
     if (kb >= 1e6) return (kb / 1e6).toFixed(2) + " GB";
     if (kb >= 1e3) return (kb / 1e3).toFixed(1) + " MB";
     return kb.toFixed(0) + " KB";
   }
-  function imgSrc(img: any, w = 600) {
-    const u = img?.url || "";
-    if (!u) return "";
-    if (img?.type === "video") return u;
-    let r = u.replace("/original=true/", "/");
-    if (!r.includes("/width=")) {
-      const b = r.includes("?") ? r.split("?")[0] : r;
-      r = b + `/width=${w},format=webp`;
-    }
-    return r;
-  }
 
-  function pagePrev() {
-    if (activeImg > 0) activeImg -= 1;
-  }
-  function pageNext() {
-    if (activeImg < galleryImages.length - 1) activeImg += 1;
-  }
-  function openLb(globalIdx: number) {
-    lbIdx = globalIdx;
-    showLb = true;
-  }
-  function prevLb() {
-    if (lbIdx > 0) lbIdx--;
-  }
-  function nextLb() {
-    if (lbIdx < galleryImages.length - 1) lbIdx++;
-  }
-
-  // ---- Batched image loader ----------------------------------------------
-  // Civitai's CDN rate-blocks / stalls when hit with many parallel requests
-  // (4 hero + 20 carousel at once). This loader keeps only MAX_INFLIGHT requests
-  // in flight, loading hero images first (low priority number = sooner), and only
-  // starts the next image once an earlier one fully loads / errors / times out.
-  const MAX_INFLIGHT = 3;
-  interface ImgJob { node: HTMLImageElement; src: string; priority: number; started: boolean }
-  let imgJobs: ImgJob[] = [];
-  let imgInflight = 0;
-  const imgCleanups = new WeakMap<ImgJob, () => void>();
-
-  $effect(() => {
-    return () => {
-      for (const job of imgJobs) {
-        imgCleanups.get(job)?.();
-      }
-      imgJobs = [];
-      imgInflight = 0;
-    };
-  });
-
-  function imgPump() {
-    while (imgInflight < MAX_INFLIGHT) {
-      let next: ImgJob | null = null;
-      for (const j of imgJobs) {
-        if (!j.started && (next === null || j.priority < next.priority)) next = j;
-      }
-      if (!next) break;
-      imgStart(next);
-    }
-  }
-  function imgSchedule() { queueMicrotask(imgPump); }
-
-  function imgStart(job: ImgJob) {
-    job.started = true;
-    imgInflight++;
-    const node = job.node;
-    let tries = 0;
-    let finished = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const loaded = () => node.complete && node.naturalWidth > 0;
-    const finish = () => {
-      if (finished) return;
-      finished = true;
-      clearTimeout(timer);
-      node.removeEventListener("load", onload);
-      node.removeEventListener("error", onerror);
-      imgInflight--;
-      imgJobs = imgJobs.filter((j) => j !== job);
-      imgCleanups.delete(job);
-      imgSchedule();
-    };
-    const attempt = () => {
-      const base = job.src;
-      node.src = tries === 0 ? base : base.includes("?") ? `${base}&_r=${tries}` : `${base}?_r=${tries}`;
-      clearTimeout(timer);
-      timer = setTimeout(() => { if (!loaded()) retry(); }, 5000);
-    };
-    const retry = () => {
-      if (tries >= 6) { finish(); return; }
-      tries++;
-      clearTimeout(timer);
-      timer = setTimeout(attempt, 400 + 400 * tries); // backoff lets transient resets recover
-    };
-    const onload = () => { if (loaded()) finish(); };
-    const onerror = () => retry();
-    node.addEventListener("load", onload);
-    node.addEventListener("error", onerror);
-    imgCleanups.set(job, () => {
-      if (finished) return;
-      finished = true;
-      clearTimeout(timer);
-      node.removeEventListener("load", onload);
-      node.removeEventListener("error", onerror);
-      imgInflight--;
-    });
-    attempt();
-  }
-
-  function batchImg(node: HTMLImageElement, params: { src: string; priority?: number }) {
-    let job: ImgJob = { node, src: params.src, priority: params.priority ?? 100, started: false };
-    imgJobs = [...imgJobs, job];
-    imgSchedule();
-    return {
-      update(p: { src: string; priority?: number }) {
-        if (p.src && p.src !== job.src) {
-          imgCleanups.get(job)?.();
-          imgJobs = imgJobs.filter((j) => j !== job);
-          node.removeAttribute("src");
-          job = { node, src: p.src, priority: p.priority ?? 100, started: false };
-          imgJobs = [...imgJobs, job];
-          imgSchedule();
-        } else if (p.priority != null) {
-          job.priority = p.priority;
-        }
-      },
-      destroy() {
-        imgCleanups.get(job)?.();
-        imgJobs = imgJobs.filter((j) => j !== job);
-        imgSchedule();
-      },
-    };
-  }
 
   function copyWord(w: string) {
     navigator.clipboard?.writeText(w);
@@ -324,8 +233,10 @@
 
   async function download(file: ModelFile) {
     if (!selectedVersion) return;
-    if (isActive(fileDl(file.id, selectedVersion.id))) return; // already downloading this file+version
-    if (isInstalled(file.id)) return; // already downloaded & healthy — don't re-download
+    const dl = fileDl(file.id, selectedVersion.id);
+    if (isActive(dl)) return;
+    if (isInstalled(file.id) && dl?.status !== "failed" && dl?.status !== "gone") return;
+    if (fileNeedsApiKey(file)) { window.open("https://civitai.com/models/" + model.id, "_blank"); return; }
     const url = file.downloadUrl || (selectedVersion as any)?.downloadUrl;
     if (!url) return;
     const dir = `${MODELS_ROOT}/${fileTargetDir(file)}`;
@@ -337,6 +248,8 @@
         downloadUrl: url,
         downloadDir: dir,
         fileName: file.name,
+        fileType: file.type,
+        modelType,
         sizeKB: file.sizeKB,
       });
     } catch (e) {
@@ -346,8 +259,9 @@
   }
 
   async function downloadDep(dep: ModelDependency) {
-    if (isActive(fileDl(dep.fileId ?? -1, dep.versionId))) return;
-    if (isInstalled(dep.fileId)) return; // already downloaded & healthy
+    const dl = fileDl(dep.fileId ?? -1, dep.versionId);
+    if (isActive(dl)) return; // already downloading this file+version
+    if (isInstalled(dep.fileId) && dl?.status !== "failed" && dl?.status !== "gone") return; // healthy install — skip
     const dir = `${MODELS_ROOT}/${depDir(dep)}`;
     try {
       await appState.queueDownload({
@@ -357,6 +271,8 @@
         downloadUrl: dep.downloadUrl,
         downloadDir: dir,
         fileName: dep.name,
+        fileType: dep.type,
+        modelType: dep.type || "Checkpoint",
         sizeKB: dep.sizeKB,
       });
     } catch (e) {
@@ -380,47 +296,13 @@
   function searchByTag(tag: string) {
     onClose();
     appState.setFilter("search", tag);
-    appState.setFilter("modelType", modelType);
+    appState.setFilter("modelType", [modelType]);
     (appState.filters as any).baseModel = [];
     (appState.filters as any).sort = "Most Downloaded";
     (appState.filters as any).period = "AllTime";
     appState.triggerSearch();
-    // Don't save — this is transient. The sidebar UX only reflects the current state,
-    // but the persisted settings (from saveSettings) are untouched.
   }
 
-  function fmtBytes(b: number) {
-    if (!b) return "0";
-    if (b >= 1e9) return (b / 1e9).toFixed(2) + " GB";
-    if (b >= 1e6) return (b / 1e6).toFixed(1) + " MB";
-    if (b >= 1e3) return (b / 1e3).toFixed(0) + " KB";
-    return b + " B";
-  }
-  function fmtSpeed(bps: number) {
-    if (!bps || bps < 1) return "";
-    if (bps >= 1e9) return (bps / 1e9).toFixed(1) + " GB/s";
-    if (bps >= 1e6) return (bps / 1e6).toFixed(1) + " MB/s";
-    if (bps >= 1e3) return (bps / 1e3).toFixed(0) + " KB/s";
-    return Math.round(bps) + " B/s";
-  }
-  function fmtEta(sec: number) {
-    if (!sec || sec <= 0) return "";
-    if (sec >= 3600) return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
-    if (sec >= 60) return `${Math.floor(sec / 60)}m ${sec % 60}s`;
-    return `${sec}s`;
-  }
-  function fmtAgo(iso: string | null | undefined): string {
-    if (!iso) return "";
-    const t = Date.parse(iso);
-    if (isNaN(t)) return "";
-    const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
-    if (s < 60) return "just now";
-    if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-    if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-    if (s < 2592000) return `${Math.floor(s / 86400)}d ago`;
-    if (s < 31536000) return `${Math.floor(s / 2592000)}mo ago`;
-    return `${Math.floor(s / 31536000)}y ago`;
-  }
   // Civitai-style scan/verified status of a file.
   function scanState(f: ModelFile): { label: string; when: string; ok: boolean; pending: boolean } {
     const pickle = (f.pickleScanResult || "").toLowerCase();
@@ -469,62 +351,47 @@
   }
 
   function downloadPrimary() {
+    if (buzzLocked || anyFileNeedsApiKey) {
+      window.open(`https://civitai.com/models/${model.id}`, "_blank");
+      return;
+    }
     const pf = files.find((f) => f.primary) || files[0];
     if (pf) download(pf);
   }
 
   // Make the thumbnail carousel scroll horizontally with the mouse wheel.
-  function hscroll(node: HTMLElement) {
-    const onWheel = (e: WheelEvent) => {
-      if (e.deltaY !== 0 && node.scrollWidth > node.clientWidth) {
-        e.preventDefault();
-        node.scrollLeft += e.deltaY;
-      }
-    };
-    node.addEventListener("wheel", onWheel, { passive: false });
-    return { destroy() { node.removeEventListener("wheel", onWheel); } };
-  }
 
-  // Keep the active thumbnail visible as you navigate the enlarged view.
-  // Scroll ONLY the carousel element (not scrollIntoView, which can scroll ancestors
-  // and shove the whole layout when selecting thumbnails near the end).
-  $effect(() => {
-    const idx = activeImg;
-    const el = carouselEl;
-    if (!el) return;
-    const btn = el.querySelectorAll("button")[idx] as HTMLElement | undefined;
-    if (!btn) return;
-    const target = btn.offsetLeft - (el.clientWidth - btn.clientWidth) / 2;
-    const max = el.scrollWidth - el.clientWidth;
-    el.scrollTo({ left: Math.max(0, Math.min(target, max)), behavior: "smooth" });
-  });
 
   // Lazy-load videos (only fetch/play when visible) so a gallery of animated previews
   // doesn't download every full-size video at once.
-  function lazyVideo(node: HTMLVideoElement, src: string) {
-    let loaded = false;
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (e.isIntersecting) {
-            if (!loaded && src) { node.src = src; loaded = true; }
-            node.play?.().catch(() => {});
-          } else {
-            node.pause?.();
-          }
-        }
-      },
-      { rootMargin: "150px" }
-    );
-    io.observe(node);
-    return { destroy() { io.disconnect(); } };
-  }
 
   // Aggregate state for the primary Download button (reflects the primary file only).
   let primaryFile = $derived(modelFiles.find((f) => f.primary) || modelFiles[0] || null);
   let primaryDl = $derived(
     primaryFile && selectedVersion ? fileDl(primaryFile.id, selectedVersion.id) : null,
   );
+
+  let buzzLocked = $derived.by(() => {
+    if (!isBuzzModel) return false;
+    return !appState.unlockedBuzzModelIds.has(model.id);
+  });
+
+  function fileNeedsApiKey(file: ModelFile): boolean {
+    const url = file.downloadUrl || "";
+    return url.includes("civitai.red") && !appState.apiKeyConfigured;
+  }
+
+  let anyFileNeedsApiKey = $derived.by(() => {
+    if (isBuzzModel) return false;
+    if (!appState.apiKeyConfigured) {
+      for (const v of appState.modelVersions) {
+        for (const f of v.files || []) {
+          if (fileNeedsApiKey(f)) return true;
+        }
+      }
+    }
+    return false;
+  });
 
   // Break the popup out of the WebUI iframe so it covers the whole window.
   // Same-origin (both served from :7860), so window.frameElement is accessible.
@@ -547,25 +414,19 @@
 
 <svelte:window
   onkeydown={(e: KeyboardEvent) => {
-    if (showLb) {
-      if (e.key === "Escape") showLb = false;
-      else if (e.key === "ArrowLeft") prevLb();
-      else if (e.key === "ArrowRight") nextLb();
-      return;
-    }
     if (e.key === "Escape") onClose();
   }}
 />
 
 <div
-  class="fixed inset-0 z-50 bg-black/75 flex items-center justify-center"
+  class="popup-backdrop fixed inset-0 z-50 flex items-center justify-center backdrop-in"
   onclick={onClose}
   onkeydown={(e) => { if (e.key === 'Escape') onClose(); }}
   role="presentation"
   data-testid="popup-backdrop"
 >
   <div
-    class="relative w-[92vw] h-[90vh] max-w-[1600px] rounded-2xl overflow-hidden bg-[#1a1b1e] flex flex-col shadow-2xl ring-1 ring-[#2c2e33]"
+    class="popup-canvas popup-enter relative w-[94vw] h-[92vh] max-w-[1780px] overflow-hidden flex flex-col"
     role="dialog"
     aria-modal="true"
     tabindex="-1"
@@ -573,17 +434,13 @@
     onclick={(e) => e.stopPropagation()}
     onkeydown={(e) => e.stopPropagation()}
   >
-    <!-- slim top bar -->
-    <div class="shrink-0 flex items-center justify-between px-6 h-12 border-b border-[#2c2e33]">
-      <span class="text-[12px] uppercase tracking-[0.14em] text-[#5c5f66] font-semibold">CivBro</span>
-      <button
-        class="text-[#909296] hover:text-[#e5e7eb] p-1.5 rounded-lg hover:bg-[#25262b] transition-colors"
-        onclick={onClose}
-        aria-label="Close"
-      >
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
-      </button>
-    </div>
+    <button
+      class="absolute top-4 right-4 z-10 text-[#aeb8c8] hover:text-white p-2.5 rounded-full transition-colors popup-close"
+      onclick={onClose}
+      aria-label="Close"
+    >
+      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
+    </button>
 
     <!-- BODY -->
     {#snippet typeIcon(t: string | undefined)}
@@ -613,77 +470,27 @@
         <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3v5h5M9 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8l-5-5z"/></svg>
       {/if}
     {/snippet}
-    <div class="flex-1 flex overflow-hidden min-h-0">
+    <div class="popup-workspace flex-1 flex overflow-hidden min-h-0">
     <!-- LEFT: enlarged viewer + carousel + description -->
-    <div class="flex-1 flex flex-col overflow-y-auto min-w-0">
-      <div class="p-4 pb-3" data-testid="viewer">
-        {#if heroImages.length > 0}
-          <div class="relative">
-            <div class="grid grid-cols-4 gap-3">
-              {#each heroImages as img, i}
-                <button
-                  class="group relative aspect-[3/4] rounded-xl overflow-hidden bg-[#25262b] border transition-all
-                    {pageStart + i === activeImg ? 'border-[#228be6] shadow-[0_0_18px_-2px_rgba(34,139,230,0.55)]' : 'border-[#2c2e33] hover:border-[#4a4e55]'}"
-                  onclick={() => openLb(pageStart + i)}
-                >
-                  {#if img.type === "video"}
-                    <video use:lazyVideo={img.url} loop muted playsinline preload="none" class="w-full h-full object-cover"></video>
-                  {:else}
-                    <img alt="" class="w-full h-full object-cover" decoding="async" use:batchImg={{ src: imgSrc(img, 450), priority: i }} />
-                  {/if}
-                </button>
-              {/each}
-            </div>
-
-            {#if galleryImages.length > 4}
-              <button
-                class="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-[#1a1b1e]/80 backdrop-blur border border-[#2c2e33] text-[#e5e7eb] hover:bg-[#228be6] hover:border-[#228be6] disabled:opacity-25 disabled:pointer-events-none flex items-center justify-center shadow-lg transition-all"
-                onclick={pagePrev}
-                disabled={activeImg === 0}
-                aria-label="Previous image"
-              >
-                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-              </button>
-              <button
-                class="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-[#1a1b1e]/80 backdrop-blur border border-[#2c2e33] text-[#e5e7eb] hover:bg-[#228be6] hover:border-[#228be6] disabled:opacity-25 disabled:pointer-events-none flex items-center justify-center shadow-lg transition-all"
-                onclick={pageNext}
-                disabled={activeImg >= galleryImages.length - 1}
-                aria-label="Next image"
-              >
-                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-              </button>
-              <div class="absolute bottom-2 right-2 text-[11px] text-[#e5e7eb] bg-[#1a1b1e]/80 backdrop-blur px-2.5 py-1 rounded-full border border-[#2c2e33]">{activeImg + 1} / {galleryImages.length}</div>
-            {/if}
-          </div>
-        {:else}
-          <div class="h-[420px] flex items-center justify-center text-[#5c5f66] text-sm border border-[#2c2e33] rounded-xl">No preview images</div>
-        {/if}
+    <div class="popup-media-column flex-1 flex flex-col overflow-y-auto min-w-0">
+      <div class="popup-viewer p-5 pb-3" data-testid="viewer">
+        <PopupGallery
+          images={galleryImages}
+          activeIdx={activeImg}
+          onprev={() => { if (activeImg > 0) activeImg -= 1; }}
+          onnext={() => { if (activeImg < galleryImages.length - 1) activeImg += 1; }}
+          onopenLb={(idx: number) => { lbIdx = idx; showLb = true; }}
+        />
       </div>
 
-      <!-- carousel -->
-      {#if galleryImages.length > 1}
-        <div class="border-t border-[#2c2e33] bg-[#161719]" data-testid="carousel">
-          <div bind:this={carouselEl} use:hscroll class="flex gap-2 overflow-x-auto px-5 py-3 civ-hscroll">
-            {#each galleryImages as img, i}
-              <button
-                class="shrink-0 w-16 h-20 rounded-lg overflow-hidden border-2 transition-all
-                  {i === activeImg ? 'border-[#228be6] opacity-100' : 'border-transparent opacity-45 hover:opacity-80'}"
-                onclick={() => (activeImg = i)}
-                title={`Image ${i + 1}`}
-              >
-                {#if img.type === "video"}
-                  <video use:lazyVideo={img.url} muted playsinline loop preload="none" class="w-full h-full object-cover"></video>
-                {:else}
-                  <img alt="" class="w-full h-full object-cover" decoding="async" use:batchImg={{ src: imgSrc(img, 128), priority: 100 + i }} />
-                {/if}
-              </button>
-            {/each}
-          </div>
-        </div>
-      {/if}
+      <PopupCarousel
+        images={galleryImages}
+        activeIdx={activeImg}
+        onselect={(i: number) => (activeImg = i)}
+      />
 
       <!-- description -->
-      <div class="border-t border-[#2c2e33] px-8 py-7 space-y-7">
+      <div class="popup-description px-8 py-8 space-y-7">
         {#snippet prose(html: string)}
           <div
             class="text-[14px] text-[#c1c2c5] leading-relaxed prose prose-invert max-w-3xl
@@ -696,21 +503,12 @@
             prose-img:rounded-xl prose-img:my-4
             prose-hr:border-[#2c2e33]"
           >
-            {@html html}
+            {@html sanitizeHtml(html)}
           </div>
         {/snippet}
 
-        {#if selectedVersion?.description}
-          <div>
-            <h3 class="text-[11px] font-semibold text-[#909296] uppercase tracking-[0.1em] mb-3">About this version{selectedVersion?.name ? ` — ${selectedVersion.name}` : ""}</h3>
-            {@render prose(selectedVersion.description)}
-          </div>
-        {/if}
         {#if model.description}
           <div>
-            {#if selectedVersion?.description}
-              <h3 class="text-[11px] font-semibold text-[#909296] uppercase tracking-[0.1em] mb-3">Description</h3>
-            {/if}
             {@render prose(model.description)}
           </div>
         {/if}
@@ -718,22 +516,82 @@
           <p class="text-[#5c5f66] italic text-[14px]">No description provided.</p>
         {/if}
             </div>
+
+          <!-- Suggested Resources -->
+          {#if suggestions.length > 0}
+            <div class="flex items-center gap-3 px-8 pt-6 pb-1">
+              <div class="flex-1" style="height:2px;background:linear-gradient(90deg,transparent,rgba(59,130,246,0.4) 15%,rgba(59,130,246,0.4) 85%,transparent);border-radius:1px"></div>
+            </div>
+            <div class="px-8 pb-4">
+              <h3 class="text-[11px] font-semibold text-[#909296] uppercase tracking-[0.1em] mb-3">Suggested Resources</h3>
+              <div class="flex gap-3 overflow-x-auto pb-2 civ-hscroll">
+                {#each suggestions as s (s.id)}
+                  <a
+                    href={`https://civitai.com/models/${s.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="shrink-0 w-[180px] rounded-lg overflow-hidden bg-[#1a1b1e] border border-[#2c2e33] hover:border-[#4dabf7] hover:scale-[1.02] transition-all no-underline"
+                  >
+                    <div class="aspect-[3/4] bg-[#25262b] relative">
+                      {#if s.images?.[0]?.url}
+                        <img class="absolute inset-0 w-full h-full object-cover object-top" src={imgSrc(s.images[0], 400)} alt="" loading="lazy" />
+                      {/if}
+                      <div class="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/90 via-black/50 to-transparent">
+                        <p class="text-[12px] text-white font-semibold leading-tight line-clamp-2 mb-1">{s.name}</p>
+                        <span class="text-[10px] text-[#909296] uppercase font-semibold tracking-wide">{s.type}</span>
+                      </div>
+                    </div>
+                  </a>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          <!-- user image gallery - inline below model description -->
+          {#if galleryImages.length > 0}
+            <div class="flex items-center gap-3 px-8 pt-6 pb-1">
+              <div class="flex-1" style="height:2px;background:linear-gradient(90deg,transparent,rgba(59,130,246,0.4) 15%,rgba(59,130,246,0.4) 85%,transparent);border-radius:1px"></div>
+            </div>
+            <div class="px-8 py-3">
+              <h3 class="text-[11px] font-semibold text-[#909296] uppercase tracking-[0.1em] mb-3">Gallery</h3>
+              <div class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));">
+                {#each galleryImages.slice(0, galleryVisible) as img, i (img.url || i)}
+                  <button
+                    class="aspect-square rounded-lg overflow-hidden bg-[#1a1b1e] border border-[#2c2e33] cursor-pointer hover:border-[#4dabf7] transition-colors"
+                    onclick={() => { lbIdx = i; showLb = true; }}
+                  >
+                    {#if img.type === "video"}
+                      <video class="w-full h-full object-cover" src={img.url} muted loop playsinline preload="metadata"></video>
+                    {:else}
+                      <img class="w-full h-full object-cover" src={imgSrc(img, 320)} alt="" loading="lazy" />
+                    {/if}
+                  </button>
+                {/each}
+              </div>
+              {#if galleryVisible < galleryImages.length}
+                <div bind:this={galSentinel} class="h-4"></div>
+              {/if}
+            </div>
+          {/if}
           </div>
 
     <!-- RIGHT: model name + versions + download + details -->
-    <aside class="w-[360px] shrink-0 border-l border-[#2c2e33] flex flex-col overflow-y-auto bg-[#1a1b1e]" data-testid="right-col">
+    <aside class="popup-inspector w-[440px] shrink-0 flex flex-col overflow-y-auto" data-testid="right-col">
       <div class="p-5 flex flex-col gap-5">
         <!-- model name + stats -->
         <div>
           <h1 class="text-[34px] font-bold text-[#c1c2c5] leading-tight tracking-tight">{model.name}</h1>
+          {#if selectedVersion?.name}
+            <p class="mt-1 text-[15px] font-semibold text-[#909296]">{selectedVersion.name}</p>
+          {/if}
           <div class="flex items-center gap-3 mt-2.5 text-[14px] text-[#c1c2c5]">
             <span class="inline-flex items-center gap-1" title="Downloads">
               <svg class="w-[16px] h-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 9V5a3 3 0 00-6 0v4M5 9h14l1 12H4L5 9z"/></svg>
-              {fmtN((model.stats || {}).downloadCount || 0)}
+              {fmtCount((model.stats || {}).downloadCount || 0)}
             </span>
             <span class="inline-flex items-center gap-1" title="Likes">
               <svg class="w-[16px] h-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 11v10M15 5l-1 6h5.5a1.5 1.5 0 011.5 1.8l-1.3 6A2 2 0 0117 21H7"/></svg>
-              {fmtN((model.stats || {}).thumbsUpCount || 0)}
+              {fmtCount((model.stats || {}).thumbsUpCount || 0)}
             </span>
             {#if (model.stats || {}).rating}
               <span class="inline-flex items-center gap-1.5 text-amber-400 font-semibold">
@@ -748,7 +606,7 @@
               <div class="flex-1 h-1.5 rounded-full bg-[#3f3f46] overflow-hidden">
                 <div class="h-full bg-amber-400 rounded-full transition-all" style="width:{Math.min(100, (((model.stats || {}).rating ?? 0) / 5) * 100)}%"></div>
               </div>
-              <span class="text-[11px] text-[#71717a] shrink-0">{fmtN((model.stats || {}).ratingCount || 0)}</span>
+              <span class="text-[11px] text-[#71717a] shrink-0">{fmtCount((model.stats || {}).ratingCount || 0)}</span>
             </div>
           {/if}
           <!-- creator -->
@@ -783,16 +641,16 @@
           <div>
             <h3 class="text-[11px] font-semibold text-[#909296] uppercase tracking-[0.1em] mb-2">Versions</h3>
             <div class="flex flex-wrap gap-1.5" data-testid="versions">
-              {#each versions as ver}
+              {#each versions as ver (ver.id)}
                 {@const inst = installedSet.has(ver.id)}
                 {@const buzz = (ver as any).availability === 'EarlyAccess' || (ver as any).buzzCost > 0}
                 <button
-                  style="padding:4px 10px"
+                  style="padding:4px 10px; position:relative; overflow:hidden"
                   class="rounded-full text-[14px] font-bold leading-tight transition-colors border inline-flex items-center gap-1.5
                     {selectedVersion?.id === ver.id
-                      ? (buzz ? 'bg-[#3a2f0a] text-[#ffd43b] border-[#fab005]' : (inst ? 'bg-[#1971c2] text-white border-[#51cf66]' : 'bg-[#1971c2] text-white border-[#1971c2]'))
+                      ? (buzz ? 'bg-[#1971c2] text-white border-[#1971c2]' : (inst ? 'bg-[#1971c2] text-white border-[#51cf66]' : 'bg-[#1971c2] text-white border-[#1971c2]'))
                       : (buzz
-                          ? 'bg-[#2a2410] text-[#fab005] border-[#fab005]/45 hover:border-[#fab005]'
+                          ? 'bg-[#25262b] text-[#c1c2c5] border-[#2c2e33] hover:bg-[#2c2e33] hover:border-[#4a4e55]'
                           : (inst
                               ? 'bg-[#1e3226] text-[#69db7c] border-[#2f9e44] hover:bg-[#24402f]'
                               : 'bg-[#25262b] text-[#c1c2c5] border-[#2c2e33] hover:bg-[#2c2e33] hover:border-[#4a4e55]'))}"
@@ -802,13 +660,17 @@
                   }}
                   title={buzz ? "Early Access — requires Buzz" : (inst ? "Installed locally" : ver.name)}
                 >
-                  {#if inst}
-                    <svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                  {/if}
-                  {ver.name}
                   {#if buzz}
-                    <svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-label="Requires Buzz"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    <span class="absolute right-0 top-0 bottom-0 rounded-r-full flex items-center justify-center" style="width:28%;background:linear-gradient(135deg,#f59e0b,#fbbf24,#d97706);z-index:0">
+                      <svg class="w-3 h-3 shrink-0 relative z-10" viewBox="0 0 24 24" fill="currentColor" aria-label="Requires Buzz" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4))"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    </span>
                   {/if}
+                  <span class="relative z-10">
+                    {#if inst}
+                      <svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    {/if}
+                    {ver.name}
+                  </span>
                 </button>
               {/each}
             </div>
@@ -867,7 +729,7 @@
             <!-- variant rows -->
             {#if modelFiles.length > 0}
               <div class="space-y-1.5 mb-3">
-                {#each modelFiles as file}
+                {#each modelFiles as file (file.id)}
                   {@const fdl = selectedVersion ? fileDl(file.id, selectedVersion.id) : null}
                   {@const sc = scanState(file)}
                   <div class="rounded-lg p-2.5 flex items-center gap-3 {file.primary ? 'bg-[#17202c]' : 'bg-transparent hover:bg-[#2f2f33]'}">
@@ -881,7 +743,7 @@
                         <span class="shrink-0 text-[10px] font-bold uppercase tracking-wide text-[#60a5fa] bg-[#1e3a8a]/40 border border-[#3b82f6]/30 px-1.5 py-0.5 rounded">{typeLabel(file.type || modelType)}</span>
                         {#if file.primary}
                           <span class="shrink-0 text-[10px] font-bold uppercase tracking-wide text-[#c1c2c5] bg-[#3f3f46] px-1.5 py-0.5 rounded">Best match</span>
-                        {/if}
+        {/if}
                       </div>
                       <p class="text-[12px] text-[#a1a1aa] truncate mt-0.5" title={file.name}>{file.name}</p>
                       <div class="flex items-center gap-2 mt-1 flex-wrap">
@@ -891,7 +753,7 @@
                             <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l7 3v6c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V5l7-3z"/><polyline points="9 12 11 14 15 10"/></svg>
                           {:else}
                             <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l7 3v6c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V5l7-3z"/><path d="M12 8v4M12 16h.01"/></svg>
-                          {/if}
+        {/if}
                           {sc.label}
                         </span>
                         <span class="text-[10px] text-[#71717a]">{sc.when}</span>
@@ -906,18 +768,18 @@
                           <div class="h-full bg-[#2563eb] transition-all duration-500" style="width:{fdl.progress}%"></div>
                         </div>
                         <div class="text-[10px] text-[#a1a1aa] mt-0.5">
-                          {fmtBytes(fdl.bytesDownloaded || 0)} / {fmtBytes(fdl.bytesTotal || 0)} · {fdl.progress}%{fmtSpeed(fdl.speed || 0) ? ` · ${fmtSpeed(fdl.speed || 0)}` : ""}{fmtEta(fdl.etaSec || 0) ? ` · ETA ${fmtEta(fdl.etaSec || 0)}` : ""}
+                          {fmtSize(fdl.bytesDownloaded || 0)} / {fmtSize(fdl.bytesTotal || 0)} · {fdl.progress}%{fmtSpeed(fdl.speed || 0) ? ` · ${fmtSpeed(fdl.speed || 0)}` : ""}{fmtEta(fdl.etaSec || 0) ? ` · ETA ${fmtEta(fdl.etaSec || 0)}` : ""}
                         </div>
                       {/if}
                     </div>
                     <span class="text-[13px] text-[#a1a1aa] font-medium shrink-0">{fmtS(file.sizeKB)}</span>
                     <button
                       class="shrink-0 w-9 h-9 rounded-md flex items-center justify-center transition-colors disabled:opacity-60
-                        {(fdl?.status === 'completed' || isInstalled(file.id)) ? 'bg-[#1e3226] text-[#22c55e]' : 'bg-[#3f3f46] hover:bg-[#2563eb] text-[#d4d4d8] hover:text-white'}"
+                        {isInstalled(file.id) ? 'bg-[#1e3226] text-[#22c55e]' : fileNeedsApiKey(file) ? 'bg-[#3f1515] text-[#ff6b6b] hover:bg-[#dc2626] hover:text-white' : 'bg-[#3f3f46] hover:bg-[#2563eb] text-[#d4d4d8] hover:text-white'}"
                       onclick={() => download(file)}
-                      disabled={isActive(fdl) || (isInstalled(file.id) && fdl?.status !== 'failed' && fdl?.status !== 'gone')}
-                      title={isInstalled(file.id) ? "Already downloaded (healthy)" : `Download ${file.name}`}
-                      aria-label={isInstalled(file.id) ? "Already installed" : `Download ${file.name}`}
+                      disabled={isActive(fdl) || (isInstalled(file.id) && fdl?.status !== 'failed' && fdl?.status !== 'gone') || fileNeedsApiKey(file)}
+                      title={isInstalled(file.id) ? "Already downloaded (healthy)" : fileNeedsApiKey(file) ? "API key required — click to open civitai.com" : `Download ${file.name}`}
+                      aria-label={isInstalled(file.id) ? "Already installed" : fileNeedsApiKey(file) ? "API key required" : `Download ${file.name}`}
                     >
                       {#if isActive(fdl)}
                         <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.2-8.6"/></svg>
@@ -941,9 +803,9 @@
             {/if}
             <button
               class="w-full py-2.5 rounded text-[14px] font-semibold text-white active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-80 border
-                {primaryDl?.status === 'completed' || isInstalled(primaryFile?.id) ? 'bg-[#2f9e44] border-[#37b24d] hover:bg-[#2b8a3e]' : 'bg-[#1d4ed8] border-[#2563eb] hover:bg-[#1a44c2]'}"
+                {primaryDl?.status === 'completed' || isInstalled(primaryFile?.id) ? 'bg-[#2f9e44] border-[#37b24d] hover:bg-[#2b8a3e]' : buzzLocked ? 'bg-[#3f3f46] border-[#52525b]' : anyFileNeedsApiKey ? 'bg-[#5c1515] border-[#dc2626] hover:bg-[#7f1d1d]' : 'bg-[#1d4ed8] border-[#2563eb] hover:bg-[#1a44c2]'}"
               onclick={downloadPrimary}
-              disabled={isActive(primaryDl) || modelFiles.length === 0 || (isInstalled(primaryFile?.id) && primaryDl?.status !== "failed" && primaryDl?.status !== "gone")}
+              disabled={isActive(primaryDl) || modelFiles.length === 0 || buzzLocked || (isInstalled(primaryFile?.id) && primaryDl?.status !== "failed" && primaryDl?.status !== "gone")}
               data-testid="download-btn"
             >
               {#if primaryDl?.status === "queued" || primaryDl?.status === "pending"}
@@ -955,6 +817,12 @@
               {:else if primaryDl?.status === "completed" || isInstalled(primaryFile?.id)}
                 <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
                 <span>Installed</span>
+              {:else if buzzLocked}
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="0"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                <span class="tracking-wide">Buy on civitai.com</span>
+              {:else if anyFileNeedsApiKey}
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="0"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                <span class="tracking-wide">API key required</span>
               {:else}
                 <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
                 <span class="tracking-wide">Download{primaryFile && primaryFile.sizeKB ? ` (${fmtS(primaryFile.sizeKB)})` : ""}</span>
@@ -965,7 +833,7 @@
                 <div class="h-full bg-[#2563eb] transition-all duration-500" style="width:{primaryDl.progress}%"></div>
               </div>
               <div class="flex justify-between mt-1 text-[10px] text-[#a1a1aa]">
-                <span>{fmtBytes(primaryDl.bytesDownloaded || 0)} / {fmtBytes(primaryDl.bytesTotal || 0)}</span>
+                <span>{fmtSize(primaryDl.bytesDownloaded || 0)} / {fmtSize(primaryDl.bytesTotal || 0)}</span>
                 <span>{primaryDl.progress}%</span>
               </div>
             {/if}
@@ -998,7 +866,7 @@
             </div>
             <p class="text-[12px] text-[#a1a1aa] mb-3">You need these files to run this model.</p>
             <div class="space-y-1.5 mb-3">
-              {#each componentFiles as file}
+              {#each componentFiles as file (file.id)}
                 {@const cfl = selectedVersion ? fileDl(file.id, selectedVersion.id) : null}
                 {@const cInst = isInstalled(file.id)}
                 <div class="rounded-lg p-2.5 bg-[#17202c] flex items-center gap-3">
@@ -1022,7 +890,7 @@
                         <div class="h-full bg-[#f59f00] transition-all duration-500" style="width:{cfl.progress}%"></div>
                       </div>
                       <div class="text-[10px] text-[#a1a1aa] mt-0.5">
-                        {fmtBytes(cfl.bytesDownloaded || 0)} / {fmtBytes(cfl.bytesTotal || 0)} · {cfl.progress}%{fmtSpeed(cfl.speed || 0) ? ` · ${fmtSpeed(cfl.speed || 0)}` : ""}{fmtEta(cfl.etaSec || 0) ? ` · ETA ${fmtEta(cfl.etaSec || 0)}` : ""}
+                        {fmtSize(cfl.bytesDownloaded || 0)} / {fmtSize(cfl.bytesTotal || 0)} · {cfl.progress}%{fmtSpeed(cfl.speed || 0) ? ` · ${fmtSpeed(cfl.speed || 0)}` : ""}{fmtEta(cfl.etaSec || 0) ? ` · ETA ${fmtEta(cfl.etaSec || 0)}` : ""}
                       </div>
                     {/if}
                   </div>
@@ -1045,7 +913,7 @@
                   </button>
                 </div>
               {/each}
-              {#each deps as dep}
+              {#each deps as dep (dep.versionId + '-' + (dep.fileId ?? '0'))}
                 {@const ddl = fileDl(dep.fileId ?? -1, dep.versionId)}
                 {@const dInst = isInstalled(dep.fileId)}
                 <div class="rounded-lg p-2.5 bg-[#17202c] flex items-center gap-3">
@@ -1070,7 +938,7 @@
                         <div class="h-full bg-[#f59f00] transition-all duration-500" style="width:{ddl.progress}%"></div>
                       </div>
                       <div class="text-[10px] text-[#a1a1aa] mt-0.5">
-                        {fmtBytes(ddl.bytesDownloaded || 0)} / {fmtBytes(ddl.bytesTotal || 0)} · {ddl.progress}%{fmtSpeed(ddl.speed || 0) ? ` · ${fmtSpeed(ddl.speed || 0)}` : ""}{fmtEta(ddl.etaSec || 0) ? ` · ETA ${fmtEta(ddl.etaSec || 0)}` : ""}
+                        {fmtSize(ddl.bytesDownloaded || 0)} / {fmtSize(ddl.bytesTotal || 0)} · {ddl.progress}%{fmtSpeed(ddl.speed || 0) ? ` · ${fmtSpeed(ddl.speed || 0)}` : ""}{fmtEta(ddl.etaSec || 0) ? ` · ETA ${fmtEta(ddl.etaSec || 0)}` : ""}
                       </div>
                     {/if}
                   </div>
@@ -1150,12 +1018,12 @@
               </div>
             {/if}
             <div class="flex justify-between px-3 py-2 border-b border-[#2c2e33]">
-              <span class="text-[#909296]">Downloads</span><span class="text-[#c1c2c5]">{fmtN((model.stats || {}).downloadCount || 0)}</span>
+              <span class="text-[#909296]">Downloads</span><span class="text-[#c1c2c5]">{fmtCount((model.stats || {}).downloadCount || 0)}</span>
             </div>
             {#if review}
               <div class="flex justify-between px-3 py-2 border-b border-[#2c2e33] gap-2">
                 <span class="text-[#909296]">Reviews</span>
-                <span class="{review.positive ? 'text-[#51cf66]' : 'text-[#ffa94d]'} font-medium text-right">{review.label} <span class="text-[#909296] font-normal">({fmtN(review.total)})</span></span>
+                <span class="{review.positive ? 'text-[#51cf66]' : 'text-[#ffa94d]'} font-medium text-right">{review.label} <span class="text-[#909296] font-normal">({fmtCount(review.total)})</span></span>
               </div>
             {/if}
             {#if hashStr}
@@ -1183,7 +1051,7 @@
             {/if}
             {#if selectedVersion?.steps != null}
               <div class="flex justify-between px-3 py-2 border-b border-[#2c2e33]">
-                <span class="text-[#909296]">Steps</span><span class="text-[#c1c2c5] font-medium">{fmtN(selectedVersion.steps!)}</span>
+                <span class="text-[#909296]">Steps</span><span class="text-[#c1c2c5] font-medium">{fmtCount(selectedVersion.steps!)}</span>
               </div>
             {/if}
             {#if selectedVersion?.tensorType}
@@ -1196,6 +1064,11 @@
                 <span class="text-[#909296]">Model Size</span><span class="text-[#c1c2c5] font-medium">{selectedVersion.modelSize}</span>
               </div>
             {/if}
+            {#if (selectedVersion as any)?.tensorCount != null}
+              <div class="flex justify-between px-3 py-2 bg-[#25262b]">
+                <span class="text-[#909296]">Tensors</span><span class="text-[#c1c2c5] font-medium">{fmtCount((selectedVersion as any).tensorCount)}</span>
+              </div>
+            {/if}
           </div>
         </div>
 
@@ -1204,7 +1077,7 @@
           <div>
             <h3 class="text-[11px] font-semibold text-[#909296] uppercase tracking-[0.1em] mb-2">Trigger Words</h3>
             <div class="flex flex-wrap gap-1.5">
-              {#each selectedVersion.trainedWords as w}
+              {#each selectedVersion.trainedWords as w (w)}
                 <button
                   class="px-2.5 py-1 bg-[#25262b] rounded-lg text-[12px] font-mono border transition-colors
                     {copied === w ? 'text-[#51cf66] border-[#51cf66]' : 'text-[#4dabf7] border-[#2c2e33] hover:bg-[#2c2e33] hover:border-[#4a4e55]'}"
@@ -1218,12 +1091,49 @@
           </div>
         {/if}
 
+        <!-- About this version -->
+        {#if selectedVersion?.description}
+          <div class="rounded-lg bg-[#25262b] border border-[#2c2e33] overflow-hidden">
+            <button
+              class="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[#2c2e33] transition-colors !border-b border-[#2c2e33]"
+              onclick={(e) => {
+                const btn = e.currentTarget;
+                const content = btn.nextElementSibling as HTMLElement;
+                const open = !btn.classList.contains("collapsed");
+                if (open) {
+                  content.style.maxHeight = "0px";
+                  btn.classList.remove("!border-b");
+                  btn.classList.add("collapsed");
+                } else {
+                  content.style.maxHeight = content.scrollHeight + "px";
+                  btn.classList.add("!border-b");
+                  btn.classList.remove("collapsed");
+                }
+              }}
+            >
+              <span class="text-[13px] font-semibold text-[#c1c2c5]">About this version{selectedVersion?.name ? ` — ${selectedVersion.name}` : ""}</span>
+              <svg class="w-4 h-4 text-[#5c5f66] transition-transform duration-200 expand-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="overflow-hidden transition-all duration-200" style="max-height:2000px">
+              <div class="px-4 py-3 text-[13px] leading-relaxed text-[#a1a1aa]
+                [&_a]:text-[#4dabf7] [&_a]:underline
+                [&_em]:text-[#c1c2c5]
+                [&_strong]:text-[#c1c2c5] [&_strong]:font-semibold
+                [&_code]:text-[#4dabf7] [&_code]:bg-[#1a1b1e] [&_code]:px-1 [&_code]:rounded
+                [&_ul]:pl-4 [&_ol]:pl-4 [&_li]:mb-1
+                [&_p]:mb-2">
+                {@html sanitizeHtml(selectedVersion.description)}
+              </div>
+            </div>
+          </div>
+        {/if}
+
         <!-- tags -->
         {#if modelTags.length}
           <div>
             <h3 class="text-[11px] font-semibold text-[#909296] uppercase tracking-[0.1em] mb-2">Tags</h3>
             <div class="flex flex-wrap gap-1.5" data-testid="tags">
-              {#each modelTags as t}
+              {#each modelTags as t (t)}
                 <button
                   class="px-2.5 py-1 bg-[#25262b] rounded-full text-[11px] text-[#9da4ae] border border-[#2c2e33] uppercase tracking-wide hover:bg-[#2c2e33] hover:text-[#c1c2c5] hover:border-[#4a4e55] cursor-pointer transition-colors"
                   onclick={() => searchByTag(t)}
@@ -1234,44 +1144,42 @@
           </div>
         {/if}
 
-        <!-- creator box -->
+        <!-- creator card -->
         {#if model.creator?.username}
-          <div class="rounded-lg bg-[#25262b] border border-[#2c2e33] overflow-hidden" data-testid="creator">
-            <div class="h-12 bg-gradient-to-r from-[#1e3a8a]/40 via-[#7c3aed]/20 to-[#25262b]"></div>
-            <div class="p-4 pt-0 -mt-6">
-              <div class="flex items-start gap-3">
-                {#if model.creator.image}
-                  <img class="w-14 h-14 rounded-full object-cover shrink-0 ring-[3px] ring-[#25262b]" src={model.creator.image} alt="" />
-                {:else}
-                  <div class="w-14 h-14 rounded-full bg-gradient-to-br from-[#4a4e55] to-[#2c2e33] flex items-center justify-center text-[20px] font-semibold text-white shrink-0 ring-[3px] ring-[#25262b]">{model.creator.username.charAt(0).toUpperCase()}</div>
-                {/if}
-                <div class="min-w-0 flex-1 pt-0.5">
-                  <p class="text-[16px] font-bold text-white truncate leading-tight">{model.creator.username}</p>
-                  {#if selectedVersion?.creator?.createdAt}
-                    <p class="text-[11px] text-[#71717a] mt-0.5">Joined {fmtAgo(selectedVersion.creator.createdAt)}</p>
+          <CreatorCard {model} {selectedVersion} />
+        {/if}
+
+        <!-- recent comments -->
+        {#if comments.length > 0}
+          <div class="rounded-lg bg-[#25262b] border border-[#2c2e33] overflow-hidden">
+            <h3 class="text-[11px] font-semibold text-[#909296] uppercase tracking-[0.1em] px-4 pt-3 pb-2">Discussion</h3>
+            {#each comments.slice(0, 4) as c (c.id)}
+              <div class="px-4 py-2.5 border-t border-[#2c2e33]">
+                <div class="flex items-center gap-2 mb-1">
+                  {#if c.user?.image}
+                    <img class="w-5 h-5 rounded-full object-cover" src={c.user.image} alt="" />
+                  {:else}
+                    <div class="w-5 h-5 rounded-full bg-[#373a40] flex items-center justify-center text-[10px] text-[#9da4ae]">{c.user?.username?.charAt(0)?.toUpperCase() || "?"}</div>
                   {/if}
+                  <span class="text-[12px] font-medium text-[#c1c2c5]">{c.user?.username || "Unknown"}</span>
+                  <span class="text-[10px] text-[#5c5f66] ml-auto">{c.createdAt ? new Date(c.createdAt).toLocaleDateString() : ""}</span>
                 </div>
+                <p class="text-[12px] text-[#a1a1aa] leading-relaxed line-clamp-3">{@html sanitizeHtml(c.content)}</p>
               </div>
-              <div class="flex items-center gap-4 mt-3 text-[12px] text-[#a1a1aa]">
-                <span class="inline-flex items-center gap-1.5">
-                  <svg class="w-[14px] h-[14px] text-[#3b82f6]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 9V5a3 3 0 00-6 0v4M5 9h14l1 12H4L5 9z"/></svg>
-                  <span class="text-white font-semibold">{fmtN((model.stats || {}).downloadCount || 0)}</span> Downloads
-                </span>
-                <span class="inline-flex items-center gap-1.5">
-                  <svg class="w-[14px] h-[14px] text-[#ef4444]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 11v10M15 5l-1 6h5.5a1.5 1.5 0 011.5 1.8l-1.3 6A2 2 0 0117 21H7"/></svg>
-                  <span class="text-white font-semibold">{fmtN((model.stats || {}).thumbsUpCount || 0)}</span> Likes
-                </span>
-              </div>
-              <a
-                class="mt-3 w-full inline-flex items-center justify-center gap-1.5 text-[12px] font-semibold text-white bg-[#1971c2] hover:bg-[#1a7cd9] rounded-lg px-3 py-2 transition-colors"
-                href={`https://civitai.com/user/${encodeURIComponent(model.creator.username)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <svg class="w-[16px] h-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
-                View profile on Civitai
-              </a>
-            </div>
+            {/each}
+            {#if commentsCursor}
+              <button
+                class="block w-full text-center text-[12px] text-[#4dabf7] hover:text-[#74c0fc] py-2.5 border-t border-[#2c2e33] transition-colors cursor-pointer"
+                onclick={loadMoreComments}
+                disabled={commentsLoading}
+              >{commentsLoading ? "Loading…" : "Load more comments"}</button>
+            {/if}
+            <a
+              class="block text-center text-[12px] text-[#909296] hover:text-[#c1c2c5] py-2 border-t border-[#2c2e33] no-underline transition-colors"
+              href={`https://civitai.com/models/${model.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >View on Civitai</a>
           </div>
         {/if}
       </div>
@@ -1280,50 +1188,120 @@
   </div>
 </div>
 
-<!-- lightbox -->
 {#if showLb}
-  <div
-    class="fixed inset-0 z-[60] bg-black flex items-center justify-center"
-    onclick={() => (showLb = false)}
-    onkeydown={(e) => { if (e.key === 'Escape') showLb = false; }}
-    role="dialog"
-    aria-modal="true"
-    tabindex="-1"
-  >
-    <button
-      class="absolute top-4 right-4 text-white/40 hover:text-white z-10 w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center"
-      onclick={() => (showLb = false)}
-      aria-label="Close"
-    >
-      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
-    </button>
-    {#if galleryImages.length > 1}
-      <button
-        class="absolute left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/5 hover:bg-white/10 text-white flex items-center justify-center transition-all z-10 {lbIdx === 0 ? 'opacity-20' : ''}"
-        onclick={(e) => {
-          e.stopPropagation();
-          prevLb();
-        }}
-        aria-label="Previous image"
-      >
-        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-      </button>
-      <button
-        class="absolute right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/5 hover:bg-white/10 text-white flex items-center justify-center transition-all z-10 {lbIdx >= galleryImages.length - 1 ? 'opacity-20' : ''}"
-        onclick={(e) => {
-          e.stopPropagation();
-          nextLb();
-        }}
-        aria-label="Next image"
-      >
-        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-      </button>
-      <div class="absolute bottom-6 left-1/2 -translate-x-1/2 text-sm text-white/30">{lbIdx + 1}/{galleryImages.length}</div>
-    {/if}
-    {#if galleryImages[lbIdx]?.type === "video"}
-      <video src={galleryImages[lbIdx].url} autoplay loop muted playsinline controls class="max-w-[92vw] max-h-[92vh] object-contain z-0 rounded-lg"></video>
-    {:else if galleryImages[lbIdx]}
-      <img alt="" class="max-w-[92vw] max-h-[92vh] object-contain z-0 rounded-lg" decoding="async" use:batchImg={{ src: imgSrc(galleryImages[lbIdx], 1600), priority: -100 }} />
-    {/if}
-  </div>
+  <PopupLightbox images={galleryImages} initialIndex={lbIdx} onclose={() => (showLb = false)} />
 {/if}
+
+<style>
+  .popup-backdrop {
+    padding: 3vh 3vw;
+    background:
+      radial-gradient(circle at 18% 10%, rgb(41 96 155 / 0.2), transparent 34%),
+      radial-gradient(circle at 82% 92%, rgb(166 109 57 / 0.12), transparent 32%),
+      rgb(3 6 12 / 0.86);
+    backdrop-filter: blur(18px) saturate(0.8);
+  }
+
+  .popup-canvas {
+    border: 1px solid rgb(148 163 184 / 0.18);
+    border-radius: 22px;
+    background:
+      linear-gradient(145deg, rgb(25 31 42 / 0.98), rgb(11 15 23 / 0.99) 58%),
+      #0b0f17;
+    box-shadow: 0 36px 100px rgb(0 0 0 / 0.62), 0 0 0 1px rgb(255 255 255 / 0.025) inset;
+  }
+
+  .popup-topbar {
+    border-bottom: 1px solid rgb(148 163 184 / 0.14);
+    background: rgb(15 20 29 / 0.82);
+    backdrop-filter: blur(18px);
+  }
+
+  .popup-mark {
+    width: 28px;
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #53b7ff, #d8ad78);
+    box-shadow: 0 0 18px rgb(83 183 255 / 0.5);
+  }
+
+  .popup-close {
+    border: 1px solid rgb(148 163 184 / 0.16);
+    background: rgb(255 255 255 / 0.045);
+  }
+
+  .popup-close:hover {
+    border-color: rgb(83 183 255 / 0.42);
+    background: rgb(83 183 255 / 0.13);
+    transform: rotate(4deg);
+  }
+
+  .popup-workspace {
+    background-image: linear-gradient(rgb(255 255 255 / 0.014) 1px, transparent 1px);
+    background-size: 100% 56px;
+  }
+
+  .popup-media-column {
+    scrollbar-color: rgb(93 106 125 / 0.58) transparent;
+  }
+
+  .popup-viewer {
+    background:
+      radial-gradient(circle at 50% 0%, rgb(63 122 173 / 0.12), transparent 46%),
+      linear-gradient(180deg, rgb(255 255 255 / 0.018), transparent);
+  }
+
+  .popup-description {
+    position: relative;
+    border-top: 1px solid rgb(148 163 184 / 0.12);
+    background: rgb(10 14 21 / 0.58);
+  }
+
+  .popup-description::before {
+    position: absolute;
+    top: -1px;
+    left: 32px;
+    width: 86px;
+    height: 1px;
+    content: "";
+    background: linear-gradient(90deg, #53b7ff, transparent);
+  }
+
+  .popup-inspector {
+    border-left: 1px solid rgb(148 163 184 / 0.14);
+    background: rgb(12 16 24 / 0.88);
+    box-shadow: -22px 0 60px rgb(0 0 0 / 0.18);
+    scrollbar-color: rgb(93 106 125 / 0.58) transparent;
+  }
+
+  .popup-inspector h1 {
+    color: #f2f5f9;
+    font-size: clamp(28px, 2vw, 38px);
+    font-weight: 680;
+    letter-spacing: -0.045em;
+    text-wrap: balance;
+  }
+
+  .popup-inspector [data-testid="download-section"],
+  .popup-inspector [data-testid="dependencies"],
+  .popup-inspector :global(.creator-card) {
+    border-color: rgb(148 163 184 / 0.15);
+    border-radius: 14px;
+    background: linear-gradient(145deg, rgb(37 45 58 / 0.76), rgb(23 29 40 / 0.7));
+    box-shadow: 0 12px 34px rgb(0 0 0 / 0.2), 0 1px 0 rgb(255 255 255 / 0.035) inset;
+  }
+
+  .popup-inspector [data-testid="download-btn"] {
+    min-height: 42px;
+    border-radius: 10px;
+    box-shadow: 0 8px 22px rgb(29 78 216 / 0.2);
+  }
+
+  @media (max-width: 1100px) {
+    .popup-backdrop { padding: 0; }
+    .popup-canvas { width: 100vw; height: 100vh; border: 0; border-radius: 0; }
+    .popup-workspace { flex-direction: column; overflow-y: auto; }
+    .popup-media-column { overflow: visible; }
+    .popup-inspector { width: 100%; overflow: visible; border-top: 1px solid rgb(148 163 184 / 0.14); border-left: 0; }
+  }
+</style>

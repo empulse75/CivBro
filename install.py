@@ -8,12 +8,20 @@ import sys
 from importlib.metadata import version as pkg_version
 from pathlib import Path
 
-from packaging.version import parse
+try:
+    from packaging.version import parse
+except ImportError:
+    def parse(v: str):
+        class _Unparseable:
+            def __le__(self, other): return False
+            def __ge__(self, other): return False
+        return _Unparseable()
 
-import_name = {"py-cpuinfo": "cpuinfo", "protobuf": "google.protobuf"}
+import_name = {"py-cpuinfo": "cpuinfo", "protobuf": "google.protobuf", "python-multipart": "multipart"}
 
 EXTENSION_DIR = Path(__file__).parent.resolve()
 BACKEND_DIR = EXTENSION_DIR / "backend"
+BACKEND_SRC = BACKEND_DIR / "civbro_backend"
 RUST_DIR = EXTENSION_DIR / "core_rust"
 
 
@@ -119,14 +127,14 @@ def build_rust_core() -> None:
         ext = ".dylib"
 
     lib_name = f"civbro_core{ext}"
-    dest_lib = BACKEND_DIR / "src" / lib_name
+    dest_lib = BACKEND_SRC / lib_name
 
     if dest_lib.exists():
         try:
-            sys.path.insert(0, str(BACKEND_DIR / "src"))
-            import civbro_core
-            civbro_core.Database()
-            print(f"[CivBro] Rust core already built and working, skipping build")
+            if str(BACKEND_SRC) not in sys.path:
+                sys.path.insert(0, str(BACKEND_SRC))
+            import civbro_core  # noqa: F401
+            print("[CivBro] Rust core already built and importable, skipping build")
             return
         except Exception:
             print("[CivBro] Existing .so not compatible, rebuilding...")
@@ -160,7 +168,7 @@ def build_rust_core() -> None:
             print(f"[CivBro] Built library not found at {src_lib}")
             return
 
-    dest_dir = BACKEND_DIR / "src"
+    dest_dir = BACKEND_SRC
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     shutil.copy2(str(src_lib), str(dest_lib))

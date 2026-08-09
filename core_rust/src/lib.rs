@@ -2,10 +2,33 @@ use pyo3::prelude::*;
 use std::path::Path;
 
 mod db;
+mod hash;
+mod license;
 mod parse;
+mod scanner;
 
 use db::Database as CivBroDb;
 
+// ---------------------------------------------------------------------------
+// Macro to reduce repeated PyDatabase null-guard boilerplate for bool methods.
+// ---------------------------------------------------------------------------
+macro_rules! with_db_bool {
+    ($self:expr, $method:ident ($($arg:expr),*)) => {{
+        if let Some(ref db) = $self.inner {
+            db.$method($($arg),*).map_err(|e| {
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string())
+            })
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Database not available",
+            ))
+        }
+    }};
+}
+
+// ---------------------------------------------------------------------------
+// PyDatabase — thin PyO3 wrapper around db::Database
+// ---------------------------------------------------------------------------
 #[pyclass(name = "Database")]
 struct PyDatabase {
     inner: Option<CivBroDb>,
@@ -14,36 +37,39 @@ struct PyDatabase {
 #[pymethods]
 impl PyDatabase {
     #[new]
-    fn new() -> PyResult<Self> {
-        let db_path = std::env::var("CIVBRO_DB_PATH").unwrap_or_else(|_| {
-            let dir = std::env::current_dir()
-                .unwrap_or_else(|_| Path::new(".").to_path_buf());
-            dir.join("civbro.db").to_string_lossy().to_string()
-        });
+    #[pyo3(signature = (path = None))]
+    fn new(path: Option<&str>) -> PyResult<Self> {
+        let db_path = path
+            .map(|p| p.to_string())
+            .or_else(|| std::env::var("CIVBRO_DB_PATH").ok())
+            .unwrap_or_else(|| {
+                let dir = std::env::current_dir()
+                    .unwrap_or_else(|_| Path::new(".").to_path_buf());
+                dir.join("civbro.db").to_string_lossy().to_string()
+            });
 
         match CivBroDb::new(&db_path) {
             Ok(db) => {
-                if let Err(e) = db.initialize() {
-                    eprintln!("[CivBro] DB init warning: {}", e);
-                }
+                db.initialize().map_err(|e| {
+                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                        "Failed to initialize database: {}",
+                        e
+                    ))
+                })?;
                 Ok(PyDatabase { inner: Some(db) })
             }
-            Err(e) => {
-                eprintln!("[CivBro] Failed to open database: {}", e);
-                Ok(PyDatabase { inner: None })
-            }
+            Err(e) => Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                "Failed to open database: {}",
+                e
+            ))),
         }
     }
 
     fn upsert_model(&self, data: &str) -> PyResult<bool> {
-        if let Some(ref db) = self.inner {
-            Ok(db.upsert_model(data).unwrap_or(false))
-        } else {
-            Ok(false)
-        }
+        with_db_bool!(self, upsert_model(data))
     }
 
-    #[pyo3(signature = (query, model_type=None, base_model=None, limit=None))]
+    #[pyo3(signature = (query, model_type = None, base_model = None, limit = None))]
     fn search(
         &self,
         query: &str,
@@ -54,12 +80,13 @@ impl PyDatabase {
         if let Some(ref db) = self.inner {
             let results = db
                 .search(query, model_type, base_model, limit.unwrap_or(20))
-                .unwrap_or_default();
-            let json = serde_json::to_string(&results)
                 .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
-            Ok(json)
+            serde_json::to_string(&results)
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
         } else {
-            Ok("[]".to_string())
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Database not available",
+            ))
         }
     }
 
@@ -84,51 +111,43 @@ impl PyDatabase {
         hash_val: &str,
         hash_type: &str,
     ) -> PyResult<bool> {
-        if let Some(ref db) = self.inner {
-            Ok(db
-                .set_local_path(model_id, path, hash_val, hash_type)
-                .unwrap_or(false))
-        } else {
-            Ok(false)
-        }
+        with_db_bool!(self, set_local_path(model_id, path, hash_val, hash_type))
     }
 
     fn get_local_models(&self) -> PyResult<String> {
         if let Some(ref db) = self.inner {
-            let results = db.get_local_models().unwrap_or_default();
-            let json = serde_json::to_string(&results)
+            let results = db
+                .get_local_models()
                 .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
-            Ok(json)
+            serde_json::to_string(&results)
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
         } else {
-            Ok("[]".to_string())
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Database not available",
+            ))
         }
     }
 
     fn add_download(&self, data: &str) -> PyResult<bool> {
-        if let Some(ref db) = self.inner {
-            Ok(db.add_download(data).unwrap_or(false))
-        } else {
-            Ok(false)
-        }
+        with_db_bool!(self, add_download(data))
     }
 
     fn get_pending_downloads(&self) -> PyResult<String> {
         if let Some(ref db) = self.inner {
-            let results = db.get_pending_downloads().unwrap_or_default();
-            let json = serde_json::to_string(&results)
+            let results = db
+                .get_pending_downloads()
                 .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
-            Ok(json)
+            serde_json::to_string(&results)
+                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
         } else {
-            Ok("[]".to_string())
+            Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Database not available",
+            ))
         }
     }
 
     fn update_download_status(&self, id: &str, status: &str) -> PyResult<bool> {
-        if let Some(ref db) = self.inner {
-            Ok(db.update_download_status(id, status).unwrap_or(false))
-        } else {
-            Ok(false)
-        }
+        with_db_bool!(self, update_download_status(id, status))
     }
 
     fn get_setting(&self, key: &str) -> PyResult<Option<String>> {
@@ -145,25 +164,51 @@ impl PyDatabase {
     }
 
     fn set_setting(&self, key: &str, value: &str) -> PyResult<bool> {
+        with_db_bool!(self, set_setting(key, value))
+    }
+
+    fn ingest_license(&self, key: &str) -> PyResult<String> {
+        match license::validate_license_key(key) {
+            Ok(()) => {
+                if let Some(ref db) = self.inner {
+                    db.set_setting("license_key", key)
+                        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+                    db.set_setting(
+                        "license_ingested_at",
+                        &std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs()
+                            .to_string(),
+                    )
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+                }
+                Ok("ok".into())
+            }
+            Err(e) => Ok(format!("invalid:{}", e)),
+        }
+    }
+
+    fn is_license_active(&self) -> PyResult<bool> {
         if let Some(ref db) = self.inner {
-            Ok(db.set_setting(key, value).unwrap_or(false))
+            match db.get_setting("license_key") {
+                Ok(Some(key)) if !key.is_empty() => {
+                    Ok(license::validate_license_key(&key).is_ok())
+                }
+                _ => Ok(false),
+            }
         } else {
             Ok(false)
         }
     }
 
     fn clear_cache(&self) -> PyResult<bool> {
-        if let Some(ref db) = self.inner {
-            Ok(db.clear_cache().unwrap_or(false))
-        } else {
-            Ok(false)
-        }
+        with_db_bool!(self, clear_cache())
     }
 }
 
 // ---------------------------------------------------------------------------
-// CPU-bound functions moved from Python to Rust (per AGENTS.md: "all CPU-bound,
-// data parsing, or hashing operations")
+// PyO3 freestanding functions
 // ---------------------------------------------------------------------------
 
 #[pyfunction]
@@ -197,59 +242,6 @@ fn build_slim_from_extras(extras_json: &str, model_id: i64) -> PyResult<String> 
 }
 
 #[pyfunction]
-fn compute_file_hash(py: Python<'_>, path: &str, algorithm: &str) -> PyResult<String> {
-    use sha2::{Digest, Sha256};
-    use std::fs::File;
-    use std::io::Read;
-
-    py.allow_threads(|| -> PyResult<String> {
-        let mut file = File::open(path)
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(e.to_string()))?;
-        let mut buffer = vec![0u8; 1024 * 1024];
-
-        if algorithm == "sha256" {
-            let mut hasher = Sha256::new();
-            loop {
-                let n = file
-                    .read(&mut buffer)
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
-                if n == 0 {
-                    break;
-                }
-                hasher.update(&buffer[..n]);
-            }
-            Ok(hex::encode(hasher.finalize()))
-        } else if algorithm == "blake3" {
-            let mut hasher = blake3::Hasher::new();
-            loop {
-                let n = file
-                    .read(&mut buffer)
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))?;
-                if n == 0 {
-                    break;
-                }
-                hasher.update(&buffer[..n]);
-            }
-            Ok(hasher.finalize().to_hex().to_string())
-        } else {
-            Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "Unsupported algorithm: {}",
-                algorithm
-            )))
-        }
-    })
-}
-
-#[pyfunction]
-fn parse_json_fast(json_str: &str) -> PyResult<String> {
-    let value: serde_json::Value = serde_json::from_str(json_str)
-        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
-    let compact = serde_json::to_string(&value)
-        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
-    Ok(compact)
-}
-
-#[pyfunction]
 fn optimize_cdn_url(url: &str, width: u32, image_type: &str) -> PyResult<String> {
     Ok(parse::optimize_image_url(url, width, image_type))
 }
@@ -266,86 +258,61 @@ fn parse_deps(trpc_json: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
-fn scan_model_dir(py: Python<'_>, dir_path: &str, extensions: Vec<String>) -> PyResult<String> {
-    use std::time::UNIX_EPOCH;
-    use walkdir::WalkDir;
+fn build_version_list(model_json: &str) -> PyResult<String> {
+    parse::build_version_list(model_json)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e))
+}
 
+#[pyfunction]
+fn build_version_detail(rest_json: &str, trpc_json: &str) -> PyResult<String> {
+    parse::build_version_detail(rest_json, trpc_json)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e))
+}
+
+#[pyfunction]
+fn compute_file_hash(py: Python<'_>, path: &str, algorithm: &str) -> PyResult<String> {
     py.allow_threads(|| -> PyResult<String> {
-        let mut results: Vec<serde_json::Value> = Vec::new();
+        hash::compute_file_hash(path, algorithm)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e))
+    })
+}
 
-        for entry in WalkDir::new(dir_path)
-            .max_depth(4)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            if !entry.file_type().is_file() {
-                continue;
-            }
+#[pyfunction]
+fn parse_json_fast(json_str: &str) -> PyResult<String> {
+    let value: serde_json::Value = serde_json::from_str(json_str)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+    let compact = serde_json::to_string(&value)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+    Ok(compact)
+}
 
-            let path = entry.path();
-            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                if extensions.iter().any(|e| e.eq_ignore_ascii_case(ext)) {
-                    let name = path
-                        .file_name()
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                        .to_string();
-                    let (size, modified) = match entry.metadata() {
-                        Ok(m) => {
-                            let s = m.len();
-                            let mod_time = m
-                                .modified()
-                                .ok()
-                                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                                .map(|d| d.as_secs());
-                            (s, mod_time)
-                        }
-                        Err(_) => (0, None),
-                    };
-
-                    results.push(serde_json::json!({
-                        "path": path.to_string_lossy().to_string(),
-                        "name": name,
-                        "size": size,
-                        "modified": modified,
-                    }));
-                }
-            }
-        }
-
-        let json = serde_json::to_string(&results)
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
-        Ok(json)
+#[pyfunction]
+fn scan_model_dir(py: Python<'_>, dir_path: &str, extensions: Vec<String>) -> PyResult<String> {
+    py.allow_threads(|| -> PyResult<String> {
+        scanner::scan_model_dir(dir_path, &extensions)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e))
     })
 }
 
 #[pyfunction]
 fn clean_orphan_parts(py: Python<'_>, root_dir: &str) -> PyResult<u32> {
-    use std::fs;
-    use walkdir::WalkDir;
-
     py.allow_threads(|| -> PyResult<u32> {
-        let mut count = 0u32;
-        for entry in WalkDir::new(root_dir)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            if !entry.file_type().is_file() {
-                continue;
-            }
-            let path = entry.path();
-            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                if ext.eq_ignore_ascii_case("part") {
-                    if fs::remove_file(path).is_ok() {
-                        count += 1;
-                    }
-                }
-            }
-        }
-        Ok(count)
+        scanner::clean_orphan_parts(root_dir)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e))
     })
 }
 
+#[pyfunction]
+fn validate_license_key(key: &str) -> PyResult<String> {
+    match license::validate_license_key(key) {
+        Ok(()) => Ok("valid".into()),
+        Err(e) => Ok(format!("invalid:{}", e)),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Module registration
+// ---------------------------------------------------------------------------
 #[pymodule]
 fn civbro_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyDatabase>()?;
@@ -361,5 +328,8 @@ fn civbro_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(optimize_cdn_url, m)?)?;
     m.add_function(wrap_pyfunction!(file_subdir, m)?)?;
     m.add_function(wrap_pyfunction!(parse_deps, m)?)?;
+    m.add_function(wrap_pyfunction!(build_version_list, m)?)?;
+    m.add_function(wrap_pyfunction!(build_version_detail, m)?)?;
+    m.add_function(wrap_pyfunction!(validate_license_key, m)?)?;
     Ok(())
 }

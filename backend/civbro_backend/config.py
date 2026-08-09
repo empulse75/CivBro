@@ -10,7 +10,7 @@ CDN_URL = "https://image.civitai.com"
 
 MODELS_ROOT = os.environ.get("SD_WEBUI_MODELS_DIR") or "/home/gonzo/webui/sd-webui-forge-classic/models"
 
-EXTENSION_DIR = Path(__file__).parent.parent.resolve()
+EXTENSION_DIR = Path(__file__).parent.parent.parent.resolve()
 DB_PATH = EXTENSION_DIR / "civbro.db"
 
 DEFAULT_CIVITAI_NSFW = "None"

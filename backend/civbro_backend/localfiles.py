@@ -1,9 +1,12 @@
-"""Local-filesystem domain logic: sidecar naming, model deletion, and
-on-disk install status. No FastAPI imports — pure, testable functions."""
+"""Local-filesystem domain logic: scanning, sidecar naming, model deletion,
+installed-version tracking, and on-disk install status.
+No FastAPI imports — pure, testable functions."""
 from __future__ import annotations
 
 import json
 import logging
+import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +15,176 @@ from .rust_facade import subdir_for_type
 logger = logging.getLogger("civbro.api")
 
 SIDECAR_SUFFIX = ".civitai.info"
+
+# ── installed-versions cache ─────────────────────────────────────────────────
+
+_installed_cache: dict = {"t": 0.0, "versions": [], "models": []}
+
+
+def get_installed_cache() -> dict:
+    return _installed_cache
+
+
+def invalidate_installed_cache() -> None:
+    _installed_cache["t"] = 0.0
+
+
+# ── filesystem scanning ─────────────────────────────────────────────────────
+
+MODEL_EXTENSIONS = {".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".gguf"}
+
+MODEL_TYPE_DIRS: dict[str, list[str]] = {
+    "Checkpoint": ["Stable-diffusion"],
+    "LORA": ["Lora"],
+    "TextualInversion": ["embeddings"],
+    "VAE": ["VAE"],
+    "Controlnet": ["ControlNet"],
+    "Upscaler": ["ESRGAN", "SwinIR", "RealESRGAN"],
+}
+
+MODEL_TYPE_DIR_SINGLE: dict[str, str] = {
+    "Checkpoint": "Stable-diffusion",
+    "LORA": "Lora",
+    "TextualInversion": "embeddings",
+    "VAE": "VAE",
+    "Controlnet": "ControlNet",
+    "Upscaler": "ESRGAN",
+}
+
+
+def scan_directories(models_root: str, type_by_dir: dict[str, str], rust_available: bool) -> dict[str, Any]:
+    """Enumerate model directories and count files by type."""
+    results: dict[str, Any] = {}
+    base = Path(models_root)
+    if not base.is_dir():
+        return results
+
+    for model_type, dir_names in MODEL_TYPE_DIRS.items():
+        for dir_name in dir_names:
+            dir_path = base / dir_name
+            if dir_path.is_dir():
+                count = 0
+                for ext in ["*.safetensors", "*.ckpt", "*.pt", "*.bin"]:
+                    count += len(list(dir_path.glob(ext)))
+                if model_type not in results:
+                    results[model_type] = {"paths": [], "fileCount": 0}
+                results[model_type]["paths"].append(str(dir_path))
+                results[model_type]["fileCount"] += count
+
+    results["metadata"] = {
+        "rust_enabled": rust_available,
+        "parallel_workers": min(os.cpu_count() or 4, 8) if rust_available else 1,
+    }
+    return results
+
+
+def scan_installed(models_root: str) -> tuple[list[int], list[int]]:
+    """Walk sidecars and return (sorted version IDs, sorted model IDs)."""
+    versions: set[int] = set()
+    models: set[int] = set()
+    root = Path(models_root)
+    try:
+        for info in root.rglob(f"*{SIDECAR_SUFFIX}"):
+            try:
+                data = json.loads(info.read_text(encoding="utf-8"))
+            except Exception as e:
+                logger.debug(f"corrupt sidecar {info}: {e}")
+                continue
+            vid = data.get("id")
+            mid = data.get("modelId")
+            if isinstance(vid, int):
+                versions.add(vid)
+            if isinstance(mid, int):
+                models.add(mid)
+    except Exception as e:
+        logger.debug(f"scan_installed failed: {e}")
+    return sorted(versions), sorted(models)
+
+
+def scan_local_models(models_root: str, type_by_dir: dict[str, str]) -> list[dict]:
+    """List all model files with sidecar metadata."""
+    root = Path(models_root)
+    items: list[dict] = []
+    idc = 0
+    try:
+        for p in root.rglob("*"):
+            if not p.is_file() or p.suffix.lower() not in MODEL_EXTENSIONS:
+                continue
+            try:
+                rel = p.relative_to(root)
+                top = rel.parts[0] if rel.parts else ""
+            except Exception:
+                logger.debug(f"unexpected path for {p} inside {root}")
+                top = ""
+            mtype = type_by_dir.get(top, top or "Other")
+            name = p.stem
+            model_id = None
+            version_id = None
+            sidecar = p.with_name(p.stem + SIDECAR_SUFFIX)
+            if sidecar.exists():
+                try:
+                    info = json.loads(sidecar.read_text(encoding="utf-8"))
+                    version_id = (
+                        info.get("id")
+                        if isinstance(info.get("id"), int)
+                        else version_id
+                    )
+                    model_id = (
+                        info.get("modelId")
+                        if isinstance(info.get("modelId"), int)
+                        else model_id
+                    )
+                    mname = (info.get("model") or {}).get("name")
+                    if mname:
+                        name = mname
+                except Exception as e:
+                    logger.debug(f"failed to read sidecar {sidecar}: {e}")
+            try:
+                size = p.stat().st_size
+            except Exception as e:
+                logger.debug(f"stat failed for {p}: {e}")
+                size = 0
+            idc += 1
+            items.append({
+                "id": idc,
+                "name": name,
+                "path": str(p),
+                "size": size,
+                "modelId": model_id,
+                "versionId": version_id,
+                "type": mtype,
+                "installed": True,
+            })
+    except Exception as e:
+        logger.error(f"Failed to list local models: {e}")
+    items.sort(key=lambda m: m["name"].lower())
+    return items
+
+
+def refresh_database(models_root: str, rust_available: bool) -> list[dict]:
+    """Scan model directories using Rust when available."""
+    scanned: list[dict] = []
+    if not rust_available:
+        return scanned
+    from .rust_facade import scan_model_dir
+
+    extensions = ["safetensors", "ckpt", "pt", "bin", "pth"]
+    for model_type, dir_name in MODEL_TYPE_DIR_SINGLE.items():
+        dir_path = os.path.join(models_root, dir_name)
+        if not os.path.isdir(dir_path):
+            continue
+        try:
+            parsed = scan_model_dir(dir_path, extensions)
+            for entry in parsed:
+                scanned.append({
+                    "path": entry.get("path", ""),
+                    "name": entry.get("name", ""),
+                    "size": entry.get("size", 0),
+                    "modelType": model_type,
+                })
+        except Exception as e:
+            logger.warning(f"Failed to scan {dir_path}: {e}")
+    return scanned
 DELETE_EXTENSIONS = (
     ".civitai.info",
     ".json",

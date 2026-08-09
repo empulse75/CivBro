@@ -7,7 +7,7 @@
    the cosmetic gradient. So the base card is just a rounded panel; decorated
    cards get their gradient frame from an inline style. */
 .civ-card {
-  border-radius: 12px;
+  border-radius: 8px;
   background: #1a1b1e;
   transition: transform 0.28s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
@@ -107,4 +107,69 @@ body {
 }
 .civ-hscroll::-webkit-scrollbar-thumb:hover {
   background: #5a5b60;
+}
+
+/* Popup entrance animation */
+@keyframes popup-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.popup-enter {
+  animation: popup-enter 0.28s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+/* Backdrop fade-in */
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.backdrop-in {
+  animation: backdrop-in 0.2s ease-out;
+}
+
+/* Version tab content transition */
+@keyframes version-fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.version-fade {
+  animation: version-fade 0.25s ease-out;
+}
+
+/* Grid card stagger entrance */
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.card-enter {
+  animation: card-enter 0.4s cubic-bezier(0.165, 0.84, 0.44, 1) both;
+}
+
+/* Skeleton loading pulse */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.6; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #25262b 25%, #2c2e33 50%, #25262b 75%);
+  background-size: 200% 100%;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+/* Smooth page transitions */
+.panel-transition {
+  transition: opacity 0.2s ease-out, transform 0.2s ease-out;
 }

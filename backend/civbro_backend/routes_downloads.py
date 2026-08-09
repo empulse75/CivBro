@@ -12,7 +12,6 @@ from .downloads import (
     find_entry,
     get_queue,
     get_throttle_until,
-    invalidate_installed_cache,
     remove_entry,
     reorder_queue,
     schedule_downloads,
@@ -20,6 +19,7 @@ from .downloads import (
     resolve_download_path,
     _schedule_lock,
 )
+from .localfiles import invalidate_installed_cache
 from . import config
 from .client import DB
 from .rust_facade import subdir_for_type

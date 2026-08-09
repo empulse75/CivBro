@@ -1,6 +1,6 @@
 <script lang="ts">
   import { appState } from "./stores.svelte.ts";
-  import type { CivitaiModel, ModelVersion, ModelFile } from "./stores.svelte.ts";
+  import type { CivitaiModel, ModelVersion, ModelFile } from "./stores/types";
   import { getModel } from "./api.ts";
   import { getCardDownloadStatus } from "./card-download-status";
   import { isNsfwImage } from "./browse";

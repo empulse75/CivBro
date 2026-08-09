@@ -1,3 +1,5 @@
+import type { CivitaiModel, FrontendConfig } from "./stores/types";
+
 const API_BASE = "/civbro/api";
 
 interface SearchParams {
@@ -12,32 +14,41 @@ interface SearchParams {
   limit?: number;
   cursor?: string;
   source?: string;
+  earlyAccess?: boolean;
 }
 
 async function fetchApi<T>(
   endpoint: string,
-  options?: RequestInit,
+  options?: { signal?: AbortSignal } & Record<string, unknown>,
   retries = 1
 ): Promise<T> {
-  const url = `${API_BASE}${endpoint}`;
+  const sep = endpoint.includes("?") ? "&" : "?";
+  const url = `${API_BASE}${endpoint}${sep}_t=${Date.now()}`;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const res = await fetch(url, {
-        headers: { "Content-Type": "application/json", ...options?.headers },
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
         ...options,
       });
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
-        throw new Error(err.detail || `API error: ${res.status}`);
+        const msg = err.detail || `API error: ${res.status}`;
+        // Map 4xx to typed errors so callers don't retry.
+        if (res.status >= 400 && res.status < 500) throw new Error("4xx:" + msg);
+        throw new Error(msg);
       }
 
       return await res.json();
     } catch (err) {
-      if (attempt < retries && (!options?.method || options.method === "GET")) {
+      const is4xx = err instanceof Error && err.message.startsWith("4xx:");
+      if (attempt < retries && !is4xx) {
         await new Promise((r) => setTimeout(r, 500));
         continue;
       }
+      // If this was a 4xx-reject, strip the prefix before re-throwing.
+      if (is4xx) throw new Error(err.message.slice(4));
       throw err;
     }
   }
@@ -57,17 +68,16 @@ export async function searchModels(params: SearchParams) {
   if (params.period) qs.set("period", params.period);
   if (params.limit) qs.set("limit", String(params.limit));
   if (params.cursor) qs.set("cursor", params.cursor);
+  if (params.earlyAccess) qs.set("earlyAccess", "true");
   qs.set("source", params.source || "rest");
   return fetchApi(`/models?${qs.toString()}`);
 }
-
-import type { CivitaiModel } from "./stores.svelte";
 
 export async function getModel(modelId: number): Promise<CivitaiModel> {
   return fetchApi<CivitaiModel>(`/models/${modelId}`);
 }
 
-export async function getModelExtras(ids: number[], filters?: { sort?: string; period?: string; type?: string; nsfw?: boolean }): Promise<{ extras: Record<string, { cosmetic?: { cssFrame: string; glow: boolean }; baseModels?: string[]; avatarDeco?: string; badge?: string; hasBuzz?: boolean; nameplate?: { gradient?: string; color?: string }; availability?: string; earlyAccessDeadline?: string; publishedAt?: string; createdAt?: string; mode?: string }> }> {
+export async function getModelExtras(ids: number[], filters?: { sort?: string; period?: string; type?: string; nsfw?: boolean }): Promise<{ extras: Record<string, { cosmetic?: { cssFrame: string; glow: boolean }; baseModels?: string[]; creator?: { username: string; image?: string }; avatarDeco?: string; badge?: string; profileBackground?: { url: string; type: "image" | "video" }; hasBuzz?: boolean; nameplate?: { gradient?: string; color?: string }; availability?: string; earlyAccessDeadline?: string; publishedAt?: string; createdAt?: string; mode?: string }> }> {
   const qs = new URLSearchParams();
   for (const i of ids) qs.append("id", String(i));
   if (filters?.sort) qs.set("sort", filters.sort);
@@ -92,6 +102,8 @@ export async function downloadModel(body: {
   downloadUrl: string;
   downloadDir: string;
   fileName?: string;
+  fileType?: string;
+  modelType?: string;
   sizeKB?: number;
 }) {
   return fetchApi("/download", {
@@ -177,6 +189,17 @@ export async function validateApiKey(key: string): Promise<{ valid: boolean; mes
   });
 }
 
+export async function ingestLicenseKey(key: string): Promise<{ status: string; message: string }> {
+  return fetchApi("/license/ingest", {
+    method: "POST",
+    body: JSON.stringify({ key }),
+  });
+}
+
+export async function getLicenseStatus(): Promise<{ active: boolean }> {
+  return fetchApi("/license/status");
+}
+
 export async function reorderDownloads(order: string[]) {
   return fetchApi("/download/reorder", {
     method: "POST",
@@ -184,15 +207,18 @@ export async function reorderDownloads(order: string[]) {
   });
 }
 
-export interface FrontendConfig {
-  modelsRoot: string;
-  dirMap: Record<string, string>;
-  frontendDirMap: Record<string, string>;
-}
-
 let _configCache: FrontendConfig | null = null;
 export async function getFrontendConfig(): Promise<FrontendConfig> {
   if (_configCache) return _configCache;
   _configCache = await fetchApi<FrontendConfig>("/config");
   return _configCache!;
+}
+
+export async function getModelComments(modelId: number, cursor?: string | null): Promise<{comments: Array<{id: number; content: string; createdAt: string; user: {username: string; image?: string} | null}>; nextCursor?: string | null}> {
+  const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  return fetchApi(`/models/${modelId}/comments${qs}`);
+}
+
+export async function getSuggestedResources(modelId: number): Promise<{items: Array<{id: number; name: string; type: string; nsfw: boolean; stats: Record<string,number>; images: Array<{url: string; type: string}>}>}> {
+  return fetchApi(`/models/${modelId}/suggested`);
 }

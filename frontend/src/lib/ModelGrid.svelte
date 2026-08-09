@@ -1,6 +1,6 @@
 <script lang="ts">
   import ModelCard from "./ModelCard.svelte";
-  import type { CivitaiModel, LocalModel } from "./stores.svelte.ts";
+  import type { CivitaiModel, LocalModel } from "./stores/types";
 
   interface Props {
     models: CivitaiModel[];
@@ -55,7 +55,7 @@
   {#if models.length > 0}
     <div
       class="grid gap-3 md:gap-4"
-      style="grid-template-columns: repeat(auto-fill, minmax(285px, 1fr));"
+      style="grid-template-columns: repeat(auto-fill, minmax(285px, 1fr)); padding-top: 24px;"
     >
       {#each models as model (model.id)}
         <ModelCard model={model} onSelect={() => onSelectModel(model)} />

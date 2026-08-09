@@ -4,9 +4,18 @@
   import ModelGrid from "./lib/ModelGrid.svelte";
   import ModelPopup from "./lib/ModelPopup.svelte";
   import LocalTab from "./lib/LocalTab.svelte";
-  import type { CivitaiModel } from "./lib/stores.svelte.ts";
+  import type { CivitaiModel } from "./lib/stores/types";
 
   appState.loadSettings();
+
+  $effect(() => {
+    const handleUnload = () => appState.cleanup();
+    window.addEventListener("beforeunload", handleUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleUnload);
+      appState.cleanup();
+    };
+  });
 
   let initialLoadDone = $state(false);
 
@@ -18,11 +27,6 @@
       } else if (appState.activeTab === "local") {
         appState.refreshLocalModels();
       }
-    }
-  });
-
-  $effect(() => {
-    if (initialLoadDone && appState.activeTab === "browse") {
     }
   });
 
@@ -78,7 +82,7 @@
     <div class="flex-1 overflow-hidden relative">
       {#if appState.activeTab === "browse"}
         <ModelGrid
-          models={appState.models}
+          models={appState.visibleModels}
           loading={appState.isLoading}
           loadingMore={appState.isLoadingMore}
           hasMore={appState.hasMore}
@@ -103,16 +107,24 @@
   />
 {:else if appState.popupLoading}
   <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm backdrop-in"
     onclick={handleClosePopup}
     onkeydown={(e) => { if (e.key === 'Escape') handleClosePopup(); }}
     role="button"
     tabindex="0"
     aria-label="Loading model details"
   >
-    <div class="flex flex-col items-center gap-3 pointer-events-none">
-      <div class="w-10 h-10 border-[3px] border-[#2563eb] border-t-transparent rounded-full animate-spin"></div>
-      <span class="text-gray-300 text-sm">Loading model…</span>
+    <div class="flex flex-col items-center gap-4 pointer-events-none popup-enter">
+      <div class="relative">
+        <div class="w-12 h-12 rounded-full border-[3px] border-[#2563eb]/30"></div>
+        <div class="w-12 h-12 rounded-full border-[3px] border-[#2563eb] border-t-transparent absolute inset-0 animate-spin"></div>
+      </div>
+      <span class="text-gray-300 text-sm font-medium">Loading model details…</span>
+      <div class="flex gap-1.5">
+        <div class="w-2 h-2 rounded-full bg-[#2563eb] skeleton" style="animation-delay:0s"></div>
+        <div class="w-2 h-2 rounded-full bg-[#2563eb] skeleton" style="animation-delay:0.15s"></div>
+        <div class="w-2 h-2 rounded-full bg-[#2563eb] skeleton" style="animation-delay:0.3s"></div>
+      </div>
     </div>
   </div>
 {/if}

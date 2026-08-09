@@ -3,25 +3,26 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from .client import RUST_AVAILABLE, DB, HTTP_CLIENT
+from .client import RUST_AVAILABLE, DB
+from .http_adapter import get_raw_http_client
 from . import downloads
 
 logger = logging.getLogger("civbro.api")
 
 
 def _shutdown():
-    if HTTP_CLIENT is not None:
+    http_client = get_raw_http_client()
+    if http_client is not None:
         import asyncio
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             loop = None
         if loop is not None:
-            loop.create_task(HTTP_CLIENT.aclose())
+            loop.create_task(http_client.aclose())
         else:
-            import httpx
             try:
-                asyncio.run(HTTP_CLIENT.aclose())
+                asyncio.run(http_client.aclose())
             except Exception as e:
                 logger.warning(f"HTTP client shutdown failed: {e}")
 

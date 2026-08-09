@@ -5,7 +5,8 @@ edition = "2021"
 
 [lib]
 name = "civbro_core"
-crate-type = ["cdylib"]
+# rlib is required for `cargo test`; cdylib is what Python loads.
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 pyo3 = { version = "0.23", features = ["extension-module"] }
@@ -17,10 +18,16 @@ hex = "0.4"
 blake3 = "1.5"
 walkdir = "2.5"
 regex = "1.11"
+base64 = "0.22"
+ed25519-dalek = "2.1"
 
-# Baremetal optimization (README §13 mandate). LTO/opt-level go in the profile
-# (setting `-C lto` via RUSTFLAGS conflicts with Cargo's per-dep embed-bitcode);
-# pair with RUSTFLAGS="-C target-cpu=native" at build time for SHA/AVX codegen.
+# Portable release profile — the .so ships to users on arbitrary hardware.
+# LTO/opt-level/codegen-units in [profile.release] are portable-safe.
+# DO NOT use RUSTFLAGS="-C target-cpu=native" — bakes host CPU features into
+# the binary (SIGILL on other CPUs). sha2/blake3 select SIMD at runtime already.
+[dev-dependencies]
+tempfile = "3"
+
 [profile.release]
 opt-level = 3
 lto = "thin"

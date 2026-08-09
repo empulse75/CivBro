@@ -1,9 +1,11 @@
 <script lang="ts">
   import { scanLocalModels, deleteLocalModel } from "./api";
   import { appState } from "./stores.svelte.ts";
+  import { fmtSize } from "./format.ts";
 
   let searchQuery = $state("");
   let scanning = $state(false);
+  const formatSize = fmtSize;
 
   // $derived.by (not $derived(fn)) — $derived(() => ...) would store the arrow
   // function itself, so `.length`/iteration would operate on a function. Read
@@ -41,13 +43,6 @@
     } catch (e) {
       appState.error = e instanceof Error ? e.message : "Failed to remove";
     }
-  }
-
-  function formatSize(bytes: number): string {
-    if (bytes >= 1000000000) return (bytes / 1000000000).toFixed(1) + " GB";
-    if (bytes >= 1000000) return (bytes / 1000000).toFixed(1) + " MB";
-    if (bytes >= 1000) return (bytes / 1000).toFixed(0) + " KB";
-    return bytes + " B";
   }
 
   function formatPath(path: string): string {
@@ -94,7 +89,7 @@
       </div>
     {:else}
       <div class="space-y-2">
-        {#each filteredModels as m}
+        {#each filteredModels as m (m.id)}
           <div class="flex items-center gap-4 p-3 bg-[#1a1b1e] rounded-xl hover:bg-[#202125] transition-colors duration-150">
             <div class="flex-1 min-w-0">
               <p class="text-sm font-medium text-white truncate">{m.name}</p>
@@ -125,14 +120,16 @@
                 >
                   View
                 </button>
+                <button
+                  class="px-3 py-1 rounded-full text-xs text-red-400 bg-red-400/10
+                    hover:bg-red-400/20 transition-colors duration-150"
+                  onclick={() => handleRemove(m.modelId!)}
+                >
+                  Remove
+                </button>
+              {:else}
+                <span class="text-[10px] text-[#5c5f66] italic">no sidecar info</span>
               {/if}
-              <button
-                class="px-3 py-1 rounded-full text-xs text-red-400 bg-red-400/10
-                  hover:bg-red-400/20 transition-colors duration-150"
-                onclick={() => handleRemove(m.modelId)}
-              >
-                Remove
-              </button>
             </div>
           </div>
         {/each}

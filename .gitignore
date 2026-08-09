@@ -25,6 +25,10 @@ civbro.db
 dist/
 **/dist/
 
+# Allow pre-built frontend dist for deployment
+!frontend/dist/
+!frontend/dist/**
+
 # Ignore any dotenv / secrets files
 .env
 .env.*

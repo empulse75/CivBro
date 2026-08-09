@@ -16,7 +16,7 @@ impl Database {
     }
 
     pub fn initialize(&self) -> SqlResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
 
         conn.execute_batch(
             "
@@ -149,62 +149,35 @@ impl Database {
         let raw_stats = serde_json::to_string(&value["stats"]).unwrap_or_else(|_| "{}".to_string());
         let raw_data = data.to_string();
 
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
 
-        let count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM models WHERE civitai_id = ?1",
-            params![civitai_id],
-            |row| row.get(0),
+        conn.execute(
+            "INSERT INTO models (
+                civitai_id, name, description, model_type, base_model,
+                nsfw, creator_name, creator_image, tags, images,
+                model_versions, raw_stats, raw_data
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+            ON CONFLICT(civitai_id) DO UPDATE SET
+                name = ?2, description = ?3, model_type = ?4, base_model = ?5,
+                nsfw = ?6, creator_name = ?7, creator_image = ?8,
+                tags = ?9, images = ?10, model_versions = ?11,
+                raw_stats = ?12, raw_data = ?13, updated_at = unixepoch()",
+            params![
+                civitai_id,
+                name,
+                description,
+                model_type,
+                base_model,
+                nsfw,
+                creator_name,
+                creator_image,
+                tags,
+                images,
+                model_versions,
+                raw_stats,
+                raw_data,
+            ],
         )?;
-
-        if count > 0 {
-            conn.execute(
-                "UPDATE models SET
-                    name = ?2, description = ?3, model_type = ?4, base_model = ?5,
-                    nsfw = ?6, creator_name = ?7, creator_image = ?8,
-                    tags = ?9, images = ?10, model_versions = ?11,
-                    raw_stats = ?12, raw_data = ?13, updated_at = unixepoch()
-                 WHERE civitai_id = ?1",
-                params![
-                    civitai_id,
-                    name,
-                    description,
-                    model_type,
-                    base_model,
-                    nsfw,
-                    creator_name,
-                    creator_image,
-                    tags,
-                    images,
-                    model_versions,
-                    raw_stats,
-                    raw_data,
-                ],
-            )?;
-        } else {
-            conn.execute(
-                "INSERT INTO models (
-                    civitai_id, name, description, model_type, base_model,
-                    nsfw, creator_name, creator_image, tags, images,
-                    model_versions, raw_stats, raw_data
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-                params![
-                    civitai_id,
-                    name,
-                    description,
-                    model_type,
-                    base_model,
-                    nsfw,
-                    creator_name,
-                    creator_image,
-                    tags,
-                    images,
-                    model_versions,
-                    raw_stats,
-                    raw_data,
-                ],
-            )?;
-        }
 
         Ok(true)
     }
@@ -216,114 +189,22 @@ impl Database {
         base_model: Option<&str>,
         limit: i64,
     ) -> SqlResult<Vec<Value>> {
-        let conn = self.conn.lock().unwrap();
-
-        let mut results: Vec<Value> = Vec::new();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let limit = limit.min(100).max(1);
 
-        if query.is_empty() && model_type.is_none() && base_model.is_none() {
-            let mut stmt = conn.prepare(
-                "SELECT raw_data FROM models ORDER BY updated_at DESC LIMIT ?1",
-            )?;
-            let rows = stmt.query_map(params![limit], |row| {
-                let raw: String = row.get(0)?;
-                Ok(raw)
-            })?;
-
-            for row in rows {
-                if let Ok(raw) = row {
-                    if let Ok(val) = serde_json::from_str::<Value>(&raw) {
-                        results.push(val);
-                    }
-                }
-            }
-            return Ok(results);
-        }
-
-        if !query.is_empty() && model_type.is_some() {
-            let mut stmt = conn.prepare(
-                "SELECT m.raw_data FROM models m
-                 JOIN models_fts fts ON m.id = fts.rowid
-                 WHERE models_fts MATCH ?1 AND m.model_type = ?2
-                 ORDER BY rank LIMIT ?3",
-            )?;
-            let ft_query = query
-                .split_whitespace()
-                .map(|w| format!("{}*", w))
-                .collect::<Vec<_>>()
-                .join(" ");
-            let rows = stmt.query_map(
-                params![ft_query, model_type.unwrap_or(""), limit],
-                |row| {
-                    let raw: String = row.get(0)?;
-                    Ok(raw)
-                },
-            )?;
-
-            for row in rows {
-                if let Ok(raw) = row {
-                    if let Ok(val) = serde_json::from_str::<Value>(&raw) {
-                        results.push(val);
-                    }
-                }
-            }
-            return Ok(results);
-        }
-
-        if !query.is_empty() {
-            let mut stmt = conn.prepare(
-                "SELECT m.raw_data FROM models m
-                 JOIN models_fts fts ON m.id = fts.rowid
-                 WHERE models_fts MATCH ?1
-                 ORDER BY rank LIMIT ?2",
-            )?;
-            let ft_query = query
-                .split_whitespace()
-                .map(|w| format!("{}*", w))
-                .collect::<Vec<_>>()
-                .join(" ");
-            let rows = stmt.query_map(params![ft_query, limit], |row| {
-                let raw: String = row.get(0)?;
-                Ok(raw)
-            })?;
-
-            for row in rows {
-                if let Ok(raw) = row {
-                    if let Ok(val) = serde_json::from_str::<Value>(&raw) {
-                        results.push(val);
-                    }
-                }
-            }
-            return Ok(results);
-        }
-
-        let mut sql = "SELECT raw_data FROM models WHERE 1=1".to_string();
         let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
-
-        if let Some(mt) = model_type {
-            sql.push_str(" AND model_type = ?");
-            param_values.push(Box::new(mt.to_string()));
-        }
-
-        if let Some(bm) = base_model {
-            sql.push_str(" AND base_model = ?");
-            param_values.push(Box::new(bm.to_string()));
-        }
-
-        sql.push_str(&format!(
-            " ORDER BY updated_at DESC LIMIT {}",
-            limit
-        ));
+        let sql = Self::build_search_sql(query, model_type, base_model, &mut param_values);
+        param_values.push(Box::new(limit));
 
         let mut stmt = conn.prepare(&sql)?;
         let param_refs: Vec<&dyn rusqlite::types::ToSql> =
             param_values.iter().map(|p| p.as_ref()).collect();
 
         let rows = stmt.query_map(param_refs.as_slice(), |row| {
-            let raw: String = row.get(0)?;
-            Ok(raw)
+            row.get::<_, String>(0)
         })?;
 
+        let mut results: Vec<Value> = Vec::new();
         for row in rows {
             if let Ok(raw) = row {
                 if let Ok(val) = serde_json::from_str::<Value>(&raw) {
@@ -331,12 +212,51 @@ impl Database {
                 }
             }
         }
-
         Ok(results)
     }
 
+    /// One search query builder for all paths: FTS when a query is present,
+    /// plain WHERE otherwise; type/base-model filters apply to both.
+    fn build_search_sql(
+        query: &str,
+        model_type: Option<&str>,
+        base_model: Option<&str>,
+        param_values: &mut Vec<Box<dyn rusqlite::types::ToSql>>,
+    ) -> String {
+        let mut sql = if query.is_empty() {
+            "SELECT raw_data FROM models WHERE 1=1".to_string()
+        } else {
+            let ft_query = query
+                .split_whitespace()
+                .map(|w| format!("\"{}\"*", w.replace('"', "\"\"")))
+                .collect::<Vec<_>>()
+                .join(" ");
+            param_values.push(Box::new(ft_query));
+            "SELECT m.raw_data FROM models m
+             JOIN models_fts fts ON m.id = fts.rowid
+             WHERE models_fts MATCH ?"
+                .to_string()
+        };
+
+        if let Some(mt) = model_type {
+            sql.push_str(if query.is_empty() { " AND model_type = ?" } else { " AND m.model_type = ?" });
+            param_values.push(Box::new(mt.to_string()));
+        }
+        if let Some(bm) = base_model {
+            sql.push_str(if query.is_empty() { " AND base_model = ?" } else { " AND m.base_model = ?" });
+            param_values.push(Box::new(bm.to_string()));
+        }
+
+        sql.push_str(if query.is_empty() {
+            " ORDER BY updated_at DESC LIMIT ?"
+        } else {
+            " ORDER BY rank LIMIT ?"
+        });
+        sql
+    }
+
     pub fn get_model(&self, id: i64) -> SqlResult<Option<String>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let result: SqlResult<String> = conn.query_row(
             "SELECT raw_data FROM models WHERE civitai_id = ?1",
             params![id],
@@ -357,7 +277,7 @@ impl Database {
         hash_val: &str,
         hash_type: &str,
     ) -> SqlResult<bool> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let affected = conn.execute(
             "UPDATE models SET local_path = ?2, local_hash = ?3, local_hash_type = ?4, local_scan_time = unixepoch() WHERE civitai_id = ?1",
             params![model_id, path, hash_val, hash_type],
@@ -366,7 +286,7 @@ impl Database {
     }
 
     pub fn get_local_models(&self) -> SqlResult<Vec<Value>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let mut stmt = conn.prepare(
             "SELECT raw_data, local_path, local_hash, local_hash_type, local_scan_time
              FROM models WHERE local_path != ''
@@ -421,7 +341,7 @@ impl Database {
             .unwrap_or("")
             .to_string();
 
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         conn.execute(
             "INSERT OR REPLACE INTO download_queue (
                 id, model_id, version_id, file_id, file_name,
@@ -443,7 +363,7 @@ impl Database {
     }
 
     pub fn get_pending_downloads(&self) -> SqlResult<Vec<Value>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let mut stmt = conn.prepare(
             "SELECT id, model_id, version_id, file_id, file_name, download_url,
                     download_path, model_type, status, progress, bytes_total,
@@ -484,7 +404,7 @@ impl Database {
     }
 
     pub fn update_download_status(&self, id: &str, status: &str) -> SqlResult<bool> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let affected = conn.execute(
             "UPDATE download_queue SET status = ?2, updated_at = unixepoch() WHERE id = ?1",
             params![id, status],
@@ -493,7 +413,7 @@ impl Database {
     }
 
     pub fn get_setting(&self, key: &str) -> SqlResult<Option<String>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let result: SqlResult<String> = conn.query_row(
             "SELECT value FROM settings WHERE key = ?1",
             params![key],
@@ -508,7 +428,7 @@ impl Database {
     }
 
     pub fn set_setting(&self, key: &str, value: &str) -> SqlResult<bool> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         conn.execute(
             "INSERT INTO settings (key, value, updated_at)
              VALUES (?1, ?2, unixepoch())
@@ -519,12 +439,135 @@ impl Database {
     }
 
     pub fn clear_cache(&self) -> SqlResult<bool> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         conn.execute("DELETE FROM models", [])?;
         conn.execute(
             "DELETE FROM models_fts",
             [],
         )?;
         Ok(true)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_db(name: &str) -> (String, Database) {
+        let path = std::env::temp_dir().join(format!(
+            "civbro-test-{}-{}.db",
+            std::process::id(),
+            name
+        ));
+        let _ = std::fs::remove_file(&path);
+        let db = Database::new(path.to_str().unwrap()).expect("open db");
+        db.initialize().expect("init schema");
+        (path.to_string_lossy().to_string(), db)
+    }
+
+    fn cleanup(path: &str) {
+        for suffix in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{}", path, suffix));
+        }
+    }
+
+    fn sample_model(id: i64, name: &str, model_type: &str, base_model: &str) -> String {
+        json!({
+            "id": id,
+            "name": name,
+            "description": format!("{} description", name),
+            "modelType": model_type,
+            "baseModel": base_model,
+            "nsfw": false,
+            "creator": {"username": "tester", "image": ""},
+            "tags": ["anime"],
+            "stats": {"downloadCount": 10},
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn upsert_inserts_then_updates_single_row() {
+        let (path, db) = temp_db("upsert");
+        assert!(db.upsert_model(&sample_model(1, "alpha", "Checkpoint", "SD 1.5")).unwrap());
+        assert!(db.upsert_model(&sample_model(1, "alpha-v2", "Checkpoint", "SD 1.5")).unwrap());
+
+        let stored = db.get_model(1).unwrap().expect("model present");
+        let val: Value = serde_json::from_str(&stored).unwrap();
+        assert_eq!(val["name"], "alpha-v2");
+
+        let all = db.search("", None, None, 100).unwrap();
+        assert_eq!(all.len(), 1, "upsert must not duplicate the row");
+        cleanup(&path);
+    }
+
+    #[test]
+    fn upsert_rejects_missing_id() {
+        let (path, db) = temp_db("noid");
+        assert!(!db.upsert_model("{\"name\": \"no id\"}").unwrap());
+        cleanup(&path);
+    }
+
+    #[test]
+    fn search_filters_by_base_model_with_fts_query() {
+        let (path, db) = temp_db("fts");
+        db.upsert_model(&sample_model(1, "anime checkpoint", "Checkpoint", "SD 1.5")).unwrap();
+        db.upsert_model(&sample_model(2, "anime xl", "Checkpoint", "SDXL 1.0")).unwrap();
+
+        // query + base_model (no type): base_model must filter (was ignored before)
+        let hits = db.search("anime", None, Some("SDXL 1.0"), 100).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0]["id"], 2);
+
+        // query + type + base_model
+        let hits = db
+            .search("anime", Some("Checkpoint"), Some("SD 1.5"), 100)
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0]["id"], 1);
+
+        // type-only filter
+        let hits = db.search("", Some("Checkpoint"), None, 100).unwrap();
+        assert_eq!(hits.len(), 2);
+        cleanup(&path);
+    }
+
+    #[test]
+    fn settings_roundtrip_and_cache_clear() {
+        let (path, db) = temp_db("settings");
+        assert!(db.set_setting("k", "v").unwrap());
+        assert_eq!(db.get_setting("k").unwrap(), Some("v".to_string()));
+        assert!(db.set_setting("k", "v2").unwrap());
+        assert_eq!(db.get_setting("k").unwrap(), Some("v2".to_string()));
+
+        db.upsert_model(&sample_model(9, "cached", "LORA", "Pony")).unwrap();
+        assert!(db.clear_cache().unwrap());
+        assert!(db.search("", None, None, 100).unwrap().is_empty());
+        cleanup(&path);
+    }
+
+    #[test]
+    fn download_queue_lifecycle() {
+        let (path, db) = temp_db("dl");
+        let entry = json!({
+            "id": "abc123",
+            "modelId": 1,
+            "versionId": 2,
+            "fileId": 3,
+            "fileName": "m.safetensors",
+            "url": "https://example.com/m",
+            "downloadPath": "/models/m.safetensors",
+            "modelType": "Checkpoint",
+        })
+        .to_string();
+        assert!(db.add_download(&entry).unwrap());
+
+        let pending = db.get_pending_downloads().unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0]["id"], "abc123");
+
+        assert!(db.update_download_status("abc123", "failed").unwrap());
+        assert!(db.get_pending_downloads().unwrap().is_empty());
+        cleanup(&path);
     }
 }

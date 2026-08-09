@@ -1,7 +1,9 @@
 <script lang="ts">
   import { appState } from "./stores.svelte.ts";
-  import type { CivitaiModel } from "./stores.svelte.ts";
+  import type { CivitaiModel } from "./stores/types";
   import { onDestroy } from "svelte";
+  import { fmtSize, fmtSpeed, fmtEta } from "./format.ts";
+  import { isApiKeyDeleteCommand } from "./settings-input";
 
   interface Props {
     onSelectModel?: (model: CivitaiModel) => void;
@@ -16,12 +18,19 @@
   let apiKeyInput = $state("");
   let apiKeyValidationStatus = $state<"valid" | "invalid" | "checking" | null>(null);
   let keyDebounceTimer: ReturnType<typeof setTimeout>;
+  let apiKeyTipTimer: ReturnType<typeof setTimeout>;
+  let showApiKeyTip = $state(false);
   let dragIdx = $state<number | null>(null);
+  let licensePopup = $state<{ message: string; type: "ok" | "invalid" } | null>(null);
+  let licensePopupTimer: ReturnType<typeof setTimeout>;
+  let settingsSynced = $state(false);
 
   onDestroy(() => {
     clearTimeout(debounceTimer);
     clearTimeout(fuzzyTimer);
     clearTimeout(keyDebounceTimer);
+    clearTimeout(apiKeyTipTimer);
+    clearTimeout(licensePopupTimer);
   });
 
   const categories = [
@@ -100,12 +109,12 @@
   ];
 
   $effect(() => {
-    if (appState.settingsLoaded) {
+    if (appState.settingsLoaded && !settingsSynced) {
+      settingsSynced = true;
       searchInput = appState.filters.search;
-      if (appState.apiKey) {
-        apiKeyInput = appState.apiKey;
-        apiKeyValidationStatus = appState.apiKeyValid === true ? "valid"
-          : appState.apiKeyValid === false ? "invalid" : null;
+      if (appState.apiKeyConfigured) {
+        apiKeyInput = "";
+        apiKeyValidationStatus = "valid";
       }
     }
   });
@@ -113,17 +122,57 @@
   function handleKeyChange() {
     clearTimeout(keyDebounceTimer);
     const val = apiKeyInput.trim();
+    if (isApiKeyDeleteCommand(val)) {
+      apiKeyValidationStatus = "checking";
+      keyDebounceTimer = setTimeout(async () => {
+        await appState.validateAndSaveKey(val);
+        apiKeyInput = "";
+        apiKeyValidationStatus = null;
+      }, 600);
+      return;
+    }
     if (!val) {
       apiKeyValidationStatus = null;
       appState.validateAndSaveKey("");
       return;
     }
+
+    if (val.toUpperCase().startsWith("CIVBRO-")) {
+      apiKeyValidationStatus = "checking";
+      keyDebounceTimer = setTimeout(async () => {
+        const result = await appState.ingestLicense(val);
+        if (result.status === "ok") {
+          apiKeyInput = "";
+          apiKeyValidationStatus = appState.apiKeyValid === true ? "valid"
+            : appState.apiKeyValid === false ? "invalid" : null;
+          licensePopup = { message: "License activated", type: "ok" };
+        } else {
+          apiKeyInput = "";
+          apiKeyValidationStatus = appState.apiKeyConfigured ? "valid" : "invalid";
+          licensePopup = { message: result.message || "Invalid license key", type: "invalid" };
+        }
+        clearTimeout(licensePopupTimer);
+        licensePopupTimer = setTimeout(() => { licensePopup = null; }, 4000);
+      }, 600);
+      return;
+    }
+
     apiKeyValidationStatus = "checking";
     keyDebounceTimer = setTimeout(async () => {
       await appState.validateAndSaveKey(val);
       apiKeyValidationStatus = appState.apiKeyValid === true ? "valid"
         : appState.apiKeyValid === false ? "invalid" : null;
     }, 600);
+  }
+
+  function startApiKeyTip() {
+    clearTimeout(apiKeyTipTimer);
+    apiKeyTipTimer = setTimeout(() => { showApiKeyTip = true; }, 1500);
+  }
+
+  function stopApiKeyTip() {
+    clearTimeout(apiKeyTipTimer);
+    showApiKeyTip = false;
   }
 
   function handleSearchInput(value: string) {
@@ -164,12 +213,10 @@
 
   function handleCategorySelect(value: string) {
     appState.toggleModelType(value);
-    appState.triggerSearch();
   }
 
   function handleBaseModelSelect(value: string) {
     appState.toggleBaseModel(value);
-    appState.triggerSearch();
   }
 
   function chipClass(selected: boolean) {
@@ -188,17 +235,14 @@
 
   function handlePeriodSelect(value: string) {
     appState.setFilter("period", appState.filters.period === value ? "AllTime" : value);
-    appState.triggerSearch();
   }
 
   function handleSortSelect(value: string) {
     appState.setFilter("sort", value);
-    appState.triggerSearch();
   }
 
   function toggleNsfw() {
     appState.setFilter("nsfw", !appState.filters.nsfw);
-    appState.triggerSearch();
   }
 
   function toggleNsfwBlur() {
@@ -206,26 +250,8 @@
     appState.saveSettings();
   }
 
-  function fmtBytes(b: number) {
-    if (!b) return "0";
-    if (b >= 1e9) return (b / 1e9).toFixed(2) + " GB";
-    if (b >= 1e6) return (b / 1e6).toFixed(1) + " MB";
-    if (b >= 1e3) return (b / 1e3).toFixed(0) + " KB";
-    return b + " B";
-  }
-  function fmtSpeed(bps: number) {
-    if (!bps || bps < 1) return "";
-    if (bps >= 1e9) return (bps / 1e9).toFixed(1) + " GB/s";
-    if (bps >= 1e6) return (bps / 1e6).toFixed(1) + " MB/s";
-    if (bps >= 1e3) return (bps / 1e3).toFixed(0) + " KB/s";
-    return Math.round(bps) + " B/s";
-  }
-  function fmtEta(sec: number) {
-    if (!sec || sec <= 0) return "";
-    if (sec >= 3600) return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
-    if (sec >= 60) return `${Math.floor(sec / 60)}m ${sec % 60}s`;
-    return `${sec}s`;
-  }
+  function fmtBytes(b: number) { return fmtSize(b); }
+
 </script>
 
 <aside class="w-[284px] shrink-0 bg-[#0f1117] border-r border-[#1a1b1e] flex flex-col h-full overflow-hidden">
@@ -380,6 +406,37 @@
       </div>
     </div>
 
+    <!-- Early Access / Updated toggles -->
+    <div class="border-t border-[#1a1b1e] pt-3">
+      <span class="text-[13px] text-gray-300 font-medium mb-2 block">Quick Filters</span>
+      <div class="flex flex-wrap gap-1.5">
+        <button
+          class="px-2.5 py-1 text-[12px] font-medium rounded-full border transition-all {chipClass(appState.filters.eaOnly)}"
+          onclick={() => {
+            clearTimeout(debounceTimer);
+            appState.filters.search = searchInput;
+            appState.filters.eaOnly = !appState.filters.eaOnly;
+            appState.saveSettings();
+            appState.triggerSearch();
+          }}
+        >
+          Early Access
+        </button>
+        <button
+          class="px-2.5 py-1 text-[12px] font-medium rounded-full border transition-all {chipClass(appState.filters.updatedOnly)}"
+          onclick={() => {
+            clearTimeout(debounceTimer);
+            appState.filters.search = searchInput;
+            appState.filters.updatedOnly = !appState.filters.updatedOnly;
+            appState.saveSettings();
+            appState.triggerSearch();
+          }}
+        >
+          Updated Last 48h
+        </button>
+      </div>
+    </div>
+
     <!-- Only Installed Toggle -->
     <div class="border-t border-[#1a1b1e] pt-3">
       <div class="flex items-center justify-between">
@@ -388,7 +445,7 @@
           class="w-11 h-6 rounded-full transition-all duration-200 relative {appState.onlyInstalled ? 'bg-[#22c55e]' : 'bg-[#3a3b40]'} hover:opacity-90"
           onclick={() => {
             appState.onlyInstalled = !appState.onlyInstalled;
-            appState.triggerSearch();
+            appState.saveSettings();
           }}
           role="switch"
           aria-checked={appState.onlyInstalled}
@@ -407,7 +464,7 @@
         <span class="text-[13px] text-gray-300 font-medium">Fast Search</span>
         <button
           class="w-11 h-6 rounded-full transition-all duration-200 relative {appState.fastSearch ? 'bg-[#2563eb]' : 'bg-[#3a3b40]'} hover:opacity-90"
-          onclick={() => { appState.fastSearch = !appState.fastSearch; }}
+          onclick={() => { appState.fastSearch = !appState.fastSearch; appState.saveSettings(); }}
           role="switch"
           aria-checked={appState.fastSearch}
           aria-label="Use AllTime period for search-box queries (keeps other filters intact)"
@@ -419,6 +476,22 @@
       </div>
     </div>
 
+    <!-- License Popup -->
+    {#if licensePopup}
+      <div class="border-t border-[#1a1b1e] pt-3 relative">
+        <div class="flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-300 {licensePopup.type === 'ok' ? 'bg-[#1e3226] text-[#22c55e] border border-[#2f9e44]/40' : 'bg-[#2c1a1a] text-[#ff6b6b] border border-[#e03131]/40'}">
+          <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            {#if licensePopup.type === 'ok'}
+              <path d="M20 6L9 17l-5-5"/>
+            {:else}
+              <circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/>
+            {/if}
+          </svg>
+          <span>{licensePopup.message}</span>
+        </div>
+      </div>
+    {/if}
+
     <!-- API Key -->
     <div class="border-t border-[#1a1b1e] pt-3">
       <div class="flex items-center gap-2">
@@ -429,7 +502,7 @@
           <span class="text-[10px] font-semibold uppercase tracking-wide text-[#ff6b6b] bg-[#2c1a1a] border border-[#e03131]/40 rounded-full px-2 py-0.5 leading-none">invalid</span>
         {/if}
       </div>
-      <div class="flex items-center gap-2 mt-2">
+      <div class="relative flex items-center gap-2 mt-2" role="group" onmouseenter={startApiKeyTip} onmouseleave={stopApiKeyTip}>
         <input
           type="password"
           placeholder="Enter API key..."
@@ -437,7 +510,29 @@
             placeholder-gray-500 outline-none focus:border-[#2563eb] transition-all duration-200"
           bind:value={apiKeyInput}
           oninput={handleKeyChange}
+          aria-describedby="api-key-delete-tip"
         />
+        {#if showApiKeyTip}
+          <div
+            id="api-key-delete-tip"
+            role="tooltip"
+            class="absolute left-0 bottom-[calc(100%+8px)] z-30 w-full rounded-lg border border-[#3b82f6]/35 bg-[#101827]/95 px-3 py-2 text-[11px] leading-4 text-[#cbd5e1] shadow-xl backdrop-blur"
+          >
+            Type "delete" to remove your saved API key from extension storage.
+          </div>
+        {/if}
+      </div>
+      {#if appState.licenseActive}
+        <div class="flex items-center gap-1.5 mt-1.5">
+          <svg class="w-3 h-3 text-[#22c55e]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+          <span class="text-[11px] text-[#22c55e] font-medium">Licensed</span>
+        </div>
+      {/if}
+      <div class="flex items-center gap-1.5 mt-1.5">
+        <svg class="w-3 h-3 text-[#a1a1aa] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>
+        </svg>
+        <a href="https://ko-fi.com/empulse75" target="_blank" rel="noopener" class="text-[11px] text-gray-500 hover:text-[#f59f00] transition-colors no-underline">Buy me a beer?</a>
       </div>
     </div>
 
@@ -457,7 +552,7 @@
       <div class="border-t border-[#1a1b1e] pt-3">
         <span class="text-[13px] text-gray-300 font-medium">Downloads</span>
         <div class="mt-2 flex flex-col gap-2 mr-0.5" role="list">
-          {#each appState.activeDownloads as dl, i}
+          {#each appState.activeDownloads as dl, i (dl.id)}
             {@const isRunning = dl.status === "downloading"}
             {@const isQueued = dl.status === "queued" || dl.status === "pending"}
             {@const speedStr = isRunning && dl.speed ? fmtSpeed(dl.speed) : ""}

@@ -7,7 +7,8 @@ import gradio as gr
 
 EXTENSION_DIR = Path(__file__).parent.parent.resolve()
 FRONTEND_DIST = EXTENSION_DIR / "frontend" / "dist"
-BACKEND_SRC = EXTENSION_DIR / "backend" / "src"
+BACKEND_PKG_DIR = EXTENSION_DIR / "backend"
+BACKEND_SRC = BACKEND_PKG_DIR / "civbro_backend"
 
 HAS_BACKEND = (BACKEND_SRC / "main.py").exists()
 
@@ -18,14 +19,14 @@ def on_app_started(demo: gr.Blocks, app):
         return
 
     import sys
-    backend_pkg = str(BACKEND_SRC.parent)
-    backend_src = str(BACKEND_SRC)
-    for p in (backend_src, backend_pkg):
+    # The backend package (civbro_backend) must be importable, and the package
+    # dir itself goes on sys.path so the native civbro_core.so inside it resolves.
+    for p in (str(BACKEND_SRC), str(BACKEND_PKG_DIR)):
         if p not in sys.path:
             sys.path.insert(0, p)
 
     try:
-        from src.main import register_routes
+        from civbro_backend.main import register_routes
     except ImportError as e:
         print(f"[CivBro] Failed to import backend: {e}")
         traceback.print_exc()

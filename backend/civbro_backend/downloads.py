@@ -20,13 +20,13 @@ from .config import (
 )
 from .trpc_extras import fetch_trpc_version_detail
 from .rust_facade import optimize_image_url, subdir_for_type
+from .localfiles import invalidate_installed_cache
 
 logger = logging.getLogger("civbro.api")
 
 _download_queue: list[dict] = []
 _schedule_lock = asyncio.Lock()
 _download_throttle_until: float = 0.0
-_installed_cache: dict = {"t": 0.0, "versions": [], "models": []}
 
 
 def resolve_download_path(download_dir: str, file_name: str) -> str:
@@ -243,7 +243,7 @@ async def _process_download(download_id: str) -> None:
             await _save_download_sidecar(entry, download_path, api_key)
         except Exception as se:
             logger.warning(f"Sidecar (preview/metadata) save failed for {download_id}: {se}")
-        _installed_cache["t"] = 0.0
+        invalidate_installed_cache()
     except Exception as e:
         entry["status"] = "failed"
         entry["errorMessage"] = str(e)
@@ -352,12 +352,7 @@ def set_throttle(enabled: bool) -> None:
         _download_throttle_until = 0.0
 
 
-def invalidate_installed_cache() -> None:
-    _installed_cache["t"] = 0.0
 
-
-def get_installed_cache() -> dict:
-    return _installed_cache
 
 
 def recover_stale_downloads() -> int:
