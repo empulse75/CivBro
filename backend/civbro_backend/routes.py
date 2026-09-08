@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 from .client import RUST_AVAILABLE
-from .http_adapter import get_raw_http_client
+from .http_adapter import get_raw_http_client, http2_enabled
 from . import downloads
 
 logger = logging.getLogger("civbro.api")
@@ -46,6 +46,7 @@ def register_routes(app: Any) -> None:
         return {
             "status": "ok",
             "rust_available": RUST_AVAILABLE,
+            "http2": http2_enabled(),
             "version": "1.0.0",
         }
 

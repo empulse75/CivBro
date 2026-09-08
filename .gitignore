@@ -30,8 +30,8 @@ __pycache__/
 /backend/civbro_backend/.civbro-*/
 /wheelhouse/
 
-# Local tests, analysis, documentation assets and development tooling
-/tests/
+# Analysis artifacts and development tooling stay local; tests ship with
+# the extension so the suite runs from any checkout.
 /docs/
 /screenshots/
 /tools/

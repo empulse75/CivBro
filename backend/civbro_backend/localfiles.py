@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,80 @@ from .rust_facade import subdir_for_type
 logger = logging.getLogger("civbro.api")
 
 SIDECAR_SUFFIX = ".civitai.info"
+
+
+# ── filesystem walking and sidecar reads ────────────────────────────────────
+
+
+def iter_files(root: Path | str) -> Iterator[os.DirEntry]:
+    """Yield a DirEntry for every file below `root`.
+
+    os.scandir carries the dirent's file/dir kind, so this costs one syscall
+    per directory where Path.rglob("*") costs an extra stat() per entry.
+    Directory symlinks are deliberately not followed: rglob does not follow
+    them either, and a self-referential link would otherwise loop forever.
+    """
+    stack: list[str] = [str(root)]
+    while stack:
+        current = stack.pop()
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+                    try:
+                        if entry.is_dir(follow_symlinks=False):
+                            stack.append(entry.path)
+                        elif entry.is_file():
+                            yield entry
+                    except OSError as e:  # entry vanished mid-walk
+                        logger.debug(f"skipping {entry.path}: {e}")
+        except OSError as e:
+            logger.debug(f"cannot scan {current}: {e}")
+
+
+# path -> (mtime_ns, size, versionId, modelId, model name). Sidecars are
+# written once when a download completes, so identity plus mtime and size is a
+# sound cache key. This matters because the frontend polls /local/installed
+# every 20s and re-parsing every sidecar JSON on a multi-thousand-model
+# library is what dominated that request.
+_sidecar_meta_cache: dict[str, tuple[int, int, int | None, int | None, str | None]] = {}
+
+
+def _sidecar_meta(path: str, st: os.stat_result) -> tuple[int | None, int | None, str | None]:
+    """Read (versionId, modelId, model name) from a sidecar, memoized on mtime."""
+    cached = _sidecar_meta_cache.get(path)
+    if cached is not None and cached[0] == st.st_mtime_ns and cached[1] == st.st_size:
+        return cached[2], cached[3], cached[4]
+    try:
+        with open(path, "rb") as fh:
+            data = json.loads(fh.read())
+    except FileNotFoundError:
+        return None, None, None
+    except Exception as e:
+        logger.debug(f"corrupt sidecar {path}: {e}")
+        return None, None, None
+    vid = data.get("id")
+    mid = data.get("modelId")
+    name = (data.get("model") or {}).get("name") if isinstance(data.get("model"), dict) else None
+    meta = (
+        vid if isinstance(vid, int) else None,
+        mid if isinstance(mid, int) else None,
+        name if isinstance(name, str) and name else None,
+    )
+    _sidecar_meta_cache[path] = (st.st_mtime_ns, st.st_size, *meta)
+    return meta
+
+
+def _prune_sidecar_cache(live_paths: set[str]) -> None:
+    """Drop memo entries for sidecars that no longer exist.
+
+    Only a full sweep of every allowed root may call this; a partial walk would
+    evict entries it simply did not visit.
+    """
+    if len(_sidecar_meta_cache) <= len(live_paths):
+        return
+    for stale in [p for p in _sidecar_meta_cache if p not in live_paths]:
+        _sidecar_meta_cache.pop(stale, None)
+
 
 # ── installed-versions cache ─────────────────────────────────────────────────
 
@@ -62,8 +137,9 @@ def scan_directories(models_root: str, type_by_dir: dict[str, str], rust_availab
                 try:
                     count = sum(
                         1
-                        for p in dir_path.iterdir()
-                        if p.is_file() and p.suffix.lower() in MODEL_EXTENSIONS
+                        for e in os.scandir(dir_str)
+                        if os.path.splitext(e.name)[1].lower() in MODEL_EXTENSIONS
+                        and e.is_file()
                     )
                     if model_type not in results:
                         results[model_type] = {"paths": [], "fileCount": 0}
@@ -78,115 +154,132 @@ def scan_directories(models_root: str, type_by_dir: dict[str, str], rust_availab
     }
     return results
 
+def _category_lookup(models_root: str, type_by_dir: dict[str, str]):
+    """Return dir -> model type, resolving each directory at most once.
+
+    The category roots are matched longest-first so a nested category wins over
+    an ancestor. Resolving per directory instead of per file is what keeps this
+    off the syscall hot path: the previous version called Path.resolve() once
+    per candidate category for every file it found.
+    """
+    from . import config
+
+    category_roots = sorted(
+        ((Path(config.get_model_dir(name, models_root)).resolve(), kind)
+         for name, kind in {**type_by_dir, **ALIAS_DIRS}.items()),
+        key=lambda pair: len(pair[0].parts), reverse=True,
+    )
+    cache: dict[str, str] = {}
+
+    def lookup(directory: str) -> str:
+        hit = cache.get(directory)
+        if hit is not None:
+            return hit
+        try:
+            resolved = Path(directory).resolve()
+        except OSError:
+            resolved = Path(directory)
+        kind = next(
+            (k for candidate, k in category_roots if resolved.is_relative_to(candidate)),
+            "Other",
+        )
+        cache[directory] = kind
+        return kind
+
+    return lookup
+
+
 def scan_installed(models_root: str) -> tuple[list[int], list[int]]:
     """Walk sidecars and return (sorted version IDs, sorted model IDs)."""
     from . import config
 
     versions: set[int] = set()
     models: set[int] = set()
-    roots = config.get_allowed_model_roots(models_root)
-    seen_infos: set[Path] = set()
+    seen_files: set[tuple[int, int]] = set()
+    live_paths: set[str] = set()
 
-    for root in roots:
+    for root in config.get_allowed_model_roots(models_root):
         if not root.is_dir():
             continue
-        try:
-            for info in root.rglob(f"*{SIDECAR_SUFFIX}"):
-                try:
-                    info_res = info.resolve()
-                    if info_res in seen_infos:
-                        continue
-                    seen_infos.add(info_res)
-                    data = json.loads(info.read_text(encoding="utf-8"))
-                except Exception as e:
-                    logger.debug(f"corrupt sidecar {info}: {e}")
-                    continue
-                vid = data.get("id")
-                mid = data.get("modelId")
-                if isinstance(vid, int):
-                    versions.add(vid)
-                if isinstance(mid, int):
-                    models.add(mid)
-        except Exception as e:
-            logger.debug(f"scan_installed failed for {root}: {e}")
+        for entry in iter_files(root):
+            if not entry.name.endswith(SIDECAR_SUFFIX):
+                continue
+            try:
+                st = entry.stat()
+            except OSError as e:
+                logger.debug(f"stat failed for {entry.path}: {e}")
+                continue
+            # (device, inode) dedupes overlapping roots, symlinks and hardlinks
+            # using the stat() this loop already needs for the cache key.
+            identity = (st.st_dev, st.st_ino)
+            if identity in seen_files:
+                continue
+            seen_files.add(identity)
+            live_paths.add(entry.path)
+            vid, mid, _ = _sidecar_meta(entry.path, st)
+            if vid is not None:
+                versions.add(vid)
+            if mid is not None:
+                models.add(mid)
+
+    _prune_sidecar_cache(live_paths)
     return sorted(versions), sorted(models)
+
 
 def scan_local_models(models_root: str, type_by_dir: dict[str, str]) -> list[dict]:
     """List all model files with sidecar metadata across allowed model roots."""
     from . import config
 
-    roots = config.get_allowed_model_roots(models_root)
-    category_roots = sorted(
-        ((Path(config.get_model_dir(name, models_root)).resolve(), kind)
-         for name, kind in {**type_by_dir, **ALIAS_DIRS}.items()),
-        key=lambda pair: len(pair[0].parts), reverse=True,
-    )
+    category_of = _category_lookup(models_root, type_by_dir)
     items: list[dict] = []
-    seen_paths: set[Path] = set()
+    seen_files: set[tuple[int, int]] = set()
     idc = 0
 
-    for root in roots:
+    for root in config.get_allowed_model_roots(models_root):
         if not root.is_dir():
             continue
-        try:
-            for p in root.rglob("*"):
-                if not p.is_file() or p.suffix.lower() not in MODEL_EXTENSIONS:
-                    continue
-                try:
-                    p_res = p.resolve()
-                    if p_res in seen_paths:
-                        continue
-                    seen_paths.add(p_res)
-                except Exception:
-                    pass
+        for entry in iter_files(root):
+            stem, ext = os.path.splitext(entry.name)
+            if ext.lower() not in MODEL_EXTENSIONS:
+                continue
+            try:
+                st = entry.stat()
+            except OSError as e:
+                logger.debug(f"stat failed for {entry.path}: {e}")
+                continue
+            identity = (st.st_dev, st.st_ino)
+            if identity in seen_files:
+                continue
+            seen_files.add(identity)
 
-                mtype = next(
-                    (kind for directory, kind in category_roots if p.resolve().is_relative_to(directory)),
-                    "Other",
-                )
+            directory = os.path.dirname(entry.path)
+            sidecar = os.path.join(directory, stem + SIDECAR_SUFFIX)
+            version_id = model_id = None
+            name = stem
+            try:
+                sidecar_st = os.stat(sidecar)
+            except OSError:
+                pass
+            else:
+                version_id, model_id, model_name = _sidecar_meta(sidecar, sidecar_st)
+                if model_name:
+                    name = model_name
 
-                name = p.stem
-                model_id = None
-                version_id = None
-                sidecar = p.with_name(p.stem + SIDECAR_SUFFIX)
-                if sidecar.exists():
-                    try:
-                        info = json.loads(sidecar.read_text(encoding="utf-8"))
-                        version_id = (
-                            info.get("id")
-                            if isinstance(info.get("id"), int)
-                            else version_id
-                        )
-                        model_id = (
-                            info.get("modelId")
-                            if isinstance(info.get("modelId"), int)
-                            else model_id
-                        )
-                        mname = (info.get("model") or {}).get("name")
-                        if mname:
-                            name = mname
-                    except Exception as e:
-                        logger.debug(f"failed to read sidecar {sidecar}: {e}")
-                try:
-                    size = p.stat().st_size
-                except Exception as e:
-                    logger.debug(f"stat failed for {p}: {e}")
-                    size = 0
-                idc += 1
-                items.append({
-                    "id": idc,
-                    "name": name,
-                    "path": str(p),
-                    "size": size,
-                    "modelId": model_id,
-                    "versionId": version_id,
-                    "type": mtype,
-                    "installed": True,
-                })
-        except Exception as e:
-            logger.error(f"Failed to list local models in {root}: {e}")
+            idc += 1
+            items.append({
+                "id": idc,
+                "name": name,
+                "path": entry.path,
+                "size": st.st_size,
+                "modelId": model_id,
+                "versionId": version_id,
+                "type": category_of(directory),
+                "installed": True,
+            })
+
     items.sort(key=lambda m: m["name"].lower())
     return items
+
 
 def refresh_database(
     models_root: str, rust_available: bool, type_by_dir: dict[str, str] | None = None
@@ -255,38 +348,37 @@ def delete_model_files(models_root: str, model_id: int) -> int:
     """Delete a model file plus all its sidecars. Returns files removed."""
     from . import config
 
-    roots = config.get_allowed_model_roots(models_root)
     removed = 0
-    seen_sidecars: set[Path] = set()
+    seen_files: set[tuple[int, int]] = set()
 
-    for root in roots:
+    for root in config.get_allowed_model_roots(models_root):
         if not root.is_dir():
             continue
-        try:
-            for info in root.rglob(f"*{SIDECAR_SUFFIX}"):
+        for entry in iter_files(root):
+            if not entry.name.endswith(SIDECAR_SUFFIX):
+                continue
+            try:
+                st = entry.stat()
+            except OSError:
+                continue
+            identity = (st.st_dev, st.st_ino)
+            if identity in seen_files:
+                continue
+            seen_files.add(identity)
+            if _sidecar_meta(entry.path, st)[1] != model_id:
+                continue
+            base = model_base_from_info(Path(entry.path))
+            for ext in DELETE_EXTENSIONS:
+                f = Path(str(base) + ext)
                 try:
-                    info_res = info.resolve()
-                    if info_res in seen_sidecars:
-                        continue
-                    seen_sidecars.add(info_res)
-                    data = json.loads(info.read_text(encoding="utf-8"))
-                except Exception:
+                    f.unlink()
+                    removed += 1
+                except FileNotFoundError:
                     continue
-                if data.get("modelId") != model_id:
-                    continue
-                base = model_base_from_info(info)
-                for ext in DELETE_EXTENSIONS:
-                    f = Path(str(base) + ext)
-                    if not f.exists():
-                        continue
-                    try:
-                        f.unlink()
-                        removed += 1
-                    except OSError as e:
-                        logger.debug(f"delete failed for {f}: {e}")
-        except Exception as e:
-            logger.debug(f"delete_model_files failed for {root}: {e}")
+                except OSError as e:
+                    logger.debug(f"delete failed for {f}: {e}")
     return removed
+
 
 def _hash_ok(path: Path, want_hash: str) -> bool | None:
     try:

@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 from fastapi import HTTPException
 
-from .client import get_civitai_key, get_http_client, http_get_with_retry
+from .client import get_civitai_key, http_get_with_retry
 from .config import (
     CIVITAI_RED_API,
     CIVITAI_REST_API,
@@ -36,8 +36,6 @@ async def fetch_from_trpc(
     period: str = "AllTime",
     early_access: bool = False,
 ) -> dict:
-    client = get_http_client()
-
     input_data: dict[str, Any] = {
         "json": {
             "browsingLevel": 127 if nsfw in ("true", "True", "Soft", "Mature", "X") else 1,
@@ -119,8 +117,6 @@ async def fetch_from_rest(
     cursor: str | None = None,
     early_access: bool = False,
 ) -> dict:
-    client = get_http_client()
-
     params: dict[str, Any] = {
         "limit": limit,
         "nsfw": "true" if nsfw in ("true", "True", "Soft", "Mature", "X") else "false",
@@ -176,8 +172,6 @@ async def fetch_from_red(
     api_key = get_civitai_key()
     if not api_key:
         raise HTTPException(status_code=401, detail="civitai.red API key not configured")
-
-    client = get_http_client()
 
     params: dict[str, Any] = {
         "limit": limit,

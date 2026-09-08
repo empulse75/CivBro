@@ -9,7 +9,7 @@ from fastapi import HTTPException, Query
 
 from .cache import search_cache_get, search_cache_key, search_cache_put
 from .civitai_api import fetch_from_red, fetch_from_rest, fetch_from_trpc
-from .client import DB, RUST_AVAILABLE, ensure_warmup_started, get_civitai_key, http_get_with_retry
+from .client import RUST_AVAILABLE, ensure_warmup_started, get_civitai_key, http_get_with_retry
 from .config import (
     CIVITAI_RED_API,
     CIVITAI_REST_API,
@@ -88,14 +88,12 @@ def register_model_routes(app: Any) -> None:
                         trpc_extras = await fetch_trpc_extras(
                             sort, period, modelType, query, nsfw=False
                         )
-                        red_ids = {str(m.get("id")) for m in result.get("items", [])}
+                        by_id = {str(m.get("id")): m for m in result.get("items", [])}
                         ea_models = []
                         for mid, ex in trpc_extras.items():
-                            if mid in red_ids:
-                                for m in result["items"]:
-                                    if str(m.get("id")) == mid:
-                                        apply_extras_to_slim(m, ex)
-                                        break
+                            target = by_id.get(mid)
+                            if target is not None:
+                                apply_extras_to_slim(target, ex)
                             elif ex.get("availability") == "EarlyAccess":
                                 ea_models.append(make_slim_from_trpc(ex, int(mid)))
                         if ea_models:
@@ -136,12 +134,9 @@ def register_model_routes(app: Any) -> None:
                         status_code=502, detail=f"tRPC API request failed: {e}"
                     )
             else:
-                if DB is not None:
-                    try:
-                        for item in result.get("items", []):
-                            DB.upsert_model(json.dumps(item))
-                    except Exception as e:
-                        logger.debug(f"Cache upsert error: {e}")
+                # No DB write here on purpose: the models table is write-only —
+                # no endpoint reads it back, and upserting a page of 100 results
+                # cost ~6ms of event-loop time plus FTS index churn per search.
                 search_cache_put(cache_key, result)
                 return result
 
