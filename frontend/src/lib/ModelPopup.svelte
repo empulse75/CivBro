@@ -72,6 +72,7 @@
   }
 
   // Map a component/file type (or filename) to the correct WebUI subdirectory.
+  // Fixes VAE / text-encoder files landing in the checkpoint folder.
   function subDir(t: string): string { return subdirForType(t, DIR_MAP); }
   function fileTargetDir(file: ModelFile): string {
     return subdirForFile(file.type || "", file.name || "", modelType, DIR_MAP);
@@ -91,6 +92,8 @@
   let galleryVisible = $state(12);
   let galSentinel = $state<HTMLDivElement | null>(null);
 
+  // Per-download state lives in the global store so progress persists across popup
+  // open/close. See appState.downloads / queueDownload / pollDownloads.
   interface DlState { fileId: number | null; versionId: number; status: string; progress: number; bytesDownloaded?: number; bytesTotal?: number; speed?: number; etaSec?: number; error?: string }
   let copied = $state("");
   let comments = $state<Array<{id: number; content: string; createdAt: string; user: {username: string; image?: string} | null}>>([]);
@@ -157,11 +160,14 @@
 
   let files = $derived<ModelFile[]>((selectedVersion?.files as ModelFile[]) || []);
 
+  // Civitai groups a version's files: the actual model checkpoint(s)/LoRA go in the
+  // Download box; auxiliary files (VAE, Text Encoder, Config…) are "Required Components".
   function isComponentType(t: string | undefined): boolean {
     const s = (t || "").toLowerCase();
     return s.includes("vae") || s.includes("encoder") || s.includes("config") || s.includes("negative") || s.includes("archive");
   }
 
+  // Category used to pick a type-specific icon + label for a file/component.
   function typeCat(t: string | undefined): string {
     const s = (t || "").toLowerCase();
     if (s.includes("vae")) return "vae";
@@ -323,6 +329,9 @@
     }
   }
 
+  // Temporary search for a tag: closes the popup, sets only the search + type filter
+  // (from the originating model), clears everything else, and triggers a one-off search.
+  // Sidebar filter state (and its saved settings) are NOT changed.
   function searchByTag(tag: string) {
     onClose();
     appState.setFilter("search", tag);
@@ -333,6 +342,7 @@
     appState.triggerSearch();
   }
 
+  // Civitai-style scan/verified status of a file.
   function scanState(f: ModelFile): { label: string; when: string; ok: boolean; pending: boolean } {
     const pickle = (f.pickleScanResult || "").toLowerCase();
     const virus = (f.virusScanResult || "").toLowerCase();
@@ -348,6 +358,7 @@
     };
   }
 
+  // Sum of all currently-active download speeds (global, across files + deps).
   let totalSpeed = $derived.by(() => {
     let s = 0;
     const dls = appState.downloads;

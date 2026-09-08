@@ -352,6 +352,8 @@
   // the clip's own first frame as a placeholder (with the ▶ indicator) until it
   // starts playing. Only near-viewport clips ever load, so the grid stays light.
   function bgAutoVideo(node: HTMLVideoElement, src: string) {
+    // Set src immediately so the first frame / poster shows at page load.
+    // Only play/pause is gated by viewport visibility.
     if (src && !node.src) node.src = src;
 
     let inView = false;
