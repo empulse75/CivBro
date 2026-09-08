@@ -64,11 +64,24 @@ def _check_system_environment() -> None:
         raise RuntimeError(f"Unsupported operating system: {platform.system()}")
 
 
-def _pip(args: list[str], *, python: str = sys.executable, protect_host: bool = True) -> None:
+def _pip(
+    args: list[str],
+    *,
+    python: str = sys.executable,
+    protect_host: bool = True,
+    env: dict[str, str] | None = None,
+) -> None:
     # Never feed requirement specifiers or paths into the host's shell-based
     # run_pip helper: markers, '<', spaces and apostrophes must remain literal.
+    #
+    # Every flag here must be valid for BOTH pip and uv: Forge Neo's --uv mode
+    # patches subprocess.run (modules_forge/uv_hook.py) to rewrite
+    # "python -m pip <args>" into "uv pip <args>" verbatim, stripping only its
+    # own BAD_FLAGS list. pip-only options such as --no-input or
+    # --disable-pip-version-check therefore reach uv untouched and abort the
+    # install with "unexpected argument".
     with tempfile.TemporaryDirectory(prefix="civbro-pip-") as tmp:
-        cmd = [python, "-m", "pip", "install", "--disable-pip-version-check", "--no-input"]
+        cmd = [python, "-m", "pip", "install"]
         if protect_host:
             constraints = []
             for name in PROTECTED_HOST_PACKAGES:
@@ -83,8 +96,9 @@ def _pip(args: list[str], *, python: str = sys.executable, protect_host: bool = 
         index = getattr(launch, "index_url", None)
         if index:
             cmd.extend(["--index-url", str(index)])
-        # pip also honors its native config, PIP_INDEX_URL and proxy environment.
-        subprocess.run([*cmd, *args], check=True)
+        # pip honors its native config, PIP_INDEX_URL and proxy environment;
+        # uv the UV_* equivalents and VIRTUAL_ENV for target discovery.
+        subprocess.run([*cmd, *args], check=True, env=env)
 
 
 def install_pip_deps() -> None:
@@ -169,7 +183,7 @@ def _activate_wheel(wheel: Path, source_fp: str, dest_pkg: Path) -> None:
     # Stage on the destination filesystem, retaining the package's actual name.
     with tempfile.TemporaryDirectory(prefix=".civbro-stage-", dir=BACKEND_SRC) as tmp:
         stage = Path(tmp)
-        _pip(["--no-deps", "--no-compile", "--target", str(stage), str(wheel)], protect_host=False)
+        _pip(["--no-deps", "--target", str(stage), str(wheel)], protect_host=False)
         candidate = stage / "civbro_core"
         if not candidate.is_dir():
             raise RuntimeError("Wheel did not contain the civbro_core package")
@@ -308,7 +322,12 @@ def _build_rust_core_source(dest_pkg: Path, source_fp: str) -> None:
         build_root = Path(tmp)
         venv.EnvBuilder(with_pip=True).create(build_root / "venv")
         python = build_root / "venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-        _pip(["maturin==1.11.5"], python=str(python), protect_host=False)
+        # Under the uv hook the installer subprocess resolves its target
+        # environment from VIRTUAL_ENV; without this pin maturin would land in
+        # the host WebUI venv instead of the throwaway build venv. Real pip
+        # ignores VIRTUAL_ENV, so setting it is safe for both.
+        build_env = {**env, "VIRTUAL_ENV": str(build_root / "venv")}
+        _pip(["maturin==1.11.5"], python=str(python), protect_host=False, env=build_env)
         output = build_root / "wheels"
         print("[CivBro] Building optimized native core (at most two parallel jobs)...", flush=True)
         try:
