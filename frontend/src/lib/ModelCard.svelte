@@ -501,7 +501,7 @@
     <DownloadButton status={dlStatus} label={dlLabel} onclick={cardDownload} />
   </div>
 
-  <div class="creator-strip absolute bottom-0 left-0 right-0 pointer-events-none z-10 bg-gradient-to-t from-black/95 via-black/75 to-transparent pt-14 pb-3.5 px-3.5 flex flex-col justify-end">
+  <div class="creator-strip absolute bottom-0 left-0 right-0 pointer-events-none z-10 pt-14 pb-3.5 px-3.5 flex flex-col justify-end">
     <div class="flex items-center gap-2 mb-1.5">
       <div class="relative shrink-0 w-8 h-8">
         {#if model.creator?.image}
