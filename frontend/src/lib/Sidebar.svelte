@@ -222,16 +222,26 @@
 
   function chipClass(selected: boolean) {
     return selected
-      ? "!bg-[#2563eb] !text-white !border-[#3b82f6]"
-      : "!bg-[#25262b] !text-[#909296] hover:!bg-[#2c2e33] hover:!text-[#c1c2c5] hover:!border-[#373a40]";
+      ? "bg-[#67e8c6] text-[#0b1018] font-semibold border-transparent shadow-sm shadow-[#67e8c6]/15"
+      : "bg-[#1a2636] text-[#a0b2c6] hover:bg-[#223246] hover:text-[#ecf4fb] border border-[#2a3a4e]/60";
+  }
+
+  function isCategorySelected(val: string) {
+    if (val === "") return appState.filters.modelType.length === 0;
+    return appState.filters.modelType.includes(val);
+  }
+
+  function isBaseModelSelected(val: string) {
+    if (val === "") return appState.filters.baseModel.length === 0;
+    return appState.filters.baseModel.includes(val);
   }
 
   function categoryChipClass(val: string) {
-    return chipClass(appState.filters.modelType.includes(val));
+    return chipClass(isCategorySelected(val));
   }
 
   function baseModelChipClass(val: string) {
-    return chipClass(appState.filters.baseModel.includes(val));
+    return chipClass(isBaseModelSelected(val));
   }
 
   function handlePeriodSelect(value: string) {
@@ -255,25 +265,53 @@
 
 </script>
 
-<aside class="w-[284px] shrink-0 bg-[#0f1117] border-r border-[#1a1b1e] flex flex-col h-full overflow-hidden">
-  <div class="px-4 py-3.5 border-b border-[#1a1b1e]">
-    <h1 class="text-lg font-bold text-white tracking-tight">CivBro</h1>
-    <p class="text-[11px] text-gray-500 mt-0.5">Civitai Browser</p>
+<aside class="w-full h-full min-h-0 flex flex-col overflow-hidden bg-[#0b1018] border-r border-[#2a3a4e] text-[#ecf4fb] selection:bg-[#67e8c6]/30 selection:text-[#67e8c6]">
+  <!-- Compact Studio Branding Header -->
+  <div class="px-4 py-3 border-b border-[#2a3a4e]/60 bg-[#131c29]/50 backdrop-blur-sm flex items-center justify-between gap-3 shrink-0">
+    <div class="flex items-center gap-2.5 min-w-0">
+      <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-[#67e8c6]/20 via-[#1a2636] to-[#b7a4ff]/20 border border-[#2a3a4e] flex items-center justify-center p-1 shrink-0 shadow-sm shadow-[#67e8c6]/10">
+        <svg class="w-full h-full" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="civ-logo-grad" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#67e8c6" />
+              <stop offset="100%" stop-color="#b7a4ff" />
+            </linearGradient>
+            <linearGradient id="civ-accent-grad" x1="0" y1="32" x2="32" y2="0" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#ffc982" />
+              <stop offset="100%" stop-color="#67e8c6" />
+            </linearGradient>
+          </defs>
+          <path d="M16 4L26 9.5V22.5L16 28L6 22.5V9.5L16 4Z" stroke="url(#civ-logo-grad)" stroke-width="2.5" stroke-linejoin="round" />
+          <path d="M16 4V16M26 9.5L16 16M6 9.5L16 16" stroke="url(#civ-logo-grad)" stroke-width="1.5" stroke-linecap="round" />
+          <circle cx="16" cy="16" r="3" fill="url(#civ-accent-grad)" />
+        </svg>
+      </div>
+      <div class="flex flex-col min-w-0">
+        <div class="flex items-center gap-1.5">
+          <span class="text-sm font-black tracking-tight text-[#ecf4fb]">Civ<span class="text-[#67e8c6]">Bro</span></span>
+          <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-[#67e8c6]/10 text-[#67e8c6] border border-[#67e8c6]/25 uppercase tracking-widest leading-none">Studio</span>
+        </div>
+        <p class="text-[10.5px] font-medium text-[#a0b2c6] tracking-wide truncate">Civitai Model Studio</p>
+      </div>
+    </div>
   </div>
 
-  <div class="flex-1 overflow-y-auto pl-3 pr-6 py-3 flex flex-col gap-3">
-    <!-- Search -->
-    <div>
-      <div class="flex gap-1.5">
+  <!-- Scrollable Control Rail -->
+  <div class="flex-1 overflow-y-auto px-3.5 py-3 flex flex-col gap-4 text-xs scrollbar-thin scrollbar-thumb-[#2a3a4e] scrollbar-track-transparent">
+    <!-- Search Section -->
+    <div class="space-y-1.5">
+      <label for="sidebar-search-input" class="sr-only">Search models</label>
+      <div class="flex gap-2">
         <div class="relative flex-1">
-          <svg class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none z-0" viewBox="0 0 20 20" fill="currentColor">
+          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#a0b2c6] pointer-events-none z-10" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
             <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
           </svg>
           <input
+            id="sidebar-search-input"
             type="text"
             placeholder="Search models..."
-            class="w-full pl-3 pr-9 py-2 text-sm bg-[#1a1b1e] border border-[#2a2b30] rounded-lg text-white
-              placeholder-gray-500 outline-none focus:border-[#2563eb] transition-all duration-200"
+            class="w-full pl-9 pr-3 py-2 text-xs bg-[#131c29] border border-[#2a3a4e] rounded-xl text-[#ecf4fb]
+              placeholder-[#a0b2c6]/60 outline-none focus:border-[#67e8c6] focus:ring-1 focus:ring-[#67e8c6] transition-all duration-200"
             value={searchInput}
             oninput={(e) => handleSearchInput((e.target as HTMLInputElement).value)}
             onkeydown={handleSearchKeydown}
@@ -282,19 +320,20 @@
           />
         </div>
         <button
-          class="px-3.5 py-2 text-sm font-medium bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-lg
-            transition-colors duration-150 shrink-0"
+          class="px-3.5 py-2 text-xs font-semibold bg-[#67e8c6] hover:bg-[#52d1b0] active:scale-[0.98] text-[#0b1018] rounded-xl
+            transition-all duration-150 shrink-0 shadow-sm shadow-[#67e8c6]/20 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#67e8c6]"
           onclick={handleSearchClick}
+          aria-label="Search"
         >
           Search
         </button>
       </div>
       {#if searchFocused && appState.suggestions.length > 0 && searchInput.length >= 2}
-        <div class="relative mt-1 bg-[#1a1b1e] border border-[#2a2b30] rounded-lg overflow-hidden z-10 shadow-xl">
+        <div class="relative mt-1 bg-[#131c29] border border-[#2a3a4e] rounded-xl overflow-hidden z-20 shadow-xl shadow-black/50">
           {#each appState.suggestions as suggestion}
             <button
-              class="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-[#2a2b30] hover:text-white
-                transition-colors duration-100 border-b border-[#25262b] last:border-0"
+              class="w-full text-left px-3 py-2 text-xs text-[#a0b2c6] hover:bg-[#1a2636] hover:text-[#ecf4fb]
+                transition-colors duration-100 border-b border-[#2a3a4e]/40 last:border-0 focus-visible:bg-[#1a2636] focus-visible:text-[#67e8c6] focus-visible:outline-none"
               onmousedown={() => handleSuggestionClick(suggestion)}
             >
               {suggestion}
@@ -304,15 +343,17 @@
       {/if}
     </div>
 
-    <!-- Category (always expanded) -->
+    <!-- Category (Model Types) -->
     <div>
-      <h3 class="text-[12px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Model types</h3>
-      <div class="flex flex-wrap gap-1.5">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-[11px] font-bold text-[#a0b2c6] uppercase tracking-wider">Model Types</h3>
+      </div>
+      <div class="flex flex-wrap gap-1.5" role="group" aria-label="Model types">
         {#each categories as cat}
           <button
-            style="border-radius:14px;padding:2px 10px;font-size:12px;font-weight:500;line-height:1.3;transition:all 0.15s ease;border:1px solid transparent"
-            class={categoryChipClass(cat.value)}
+            class="px-2.5 py-1 text-[11.5px] font-medium rounded-lg transition-all duration-150 border cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#67e8c6] {categoryChipClass(cat.value)}"
             onclick={() => handleCategorySelect(cat.value)}
+            aria-pressed={isCategorySelected(cat.value)}
           >
             {cat.label}
           </button>
@@ -320,17 +361,19 @@
       </div>
     </div>
 
-    <hr class="border-0 h-px my-1" style="background:linear-gradient(90deg, transparent, rgba(59,130,246,0.3) 20%, rgba(59,130,246,0.3) 80%, transparent)" />
+    <div class="h-px bg-gradient-to-r from-transparent via-[#2a3a4e]/60 to-transparent my-0.5"></div>
 
-    <!-- Base Model (always expanded) -->
+    <!-- Base Model -->
     <div>
-      <h3 class="text-[12px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Base Model</h3>
-      <div class="flex flex-wrap gap-1.5">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-[11px] font-bold text-[#a0b2c6] uppercase tracking-wider">Base Model</h3>
+      </div>
+      <div class="flex flex-wrap gap-1.5" role="group" aria-label="Base models">
         {#each baseModels as bm}
           <button
-            style="border-radius:14px;padding:2px 10px;font-size:12px;font-weight:500;line-height:1.3;transition:all 0.15s ease;border:1px solid transparent"
-            class={baseModelChipClass(bm.value)}
+            class="px-2.5 py-1 text-[11.5px] font-medium rounded-lg transition-all duration-150 border cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#67e8c6] {baseModelChipClass(bm.value)}"
             onclick={() => handleBaseModelSelect(bm.value)}
+            aria-pressed={isBaseModelSelected(bm.value)}
           >
             {bm.label}
           </button>
@@ -338,17 +381,19 @@
       </div>
     </div>
 
-    <hr class="border-0 h-px my-1" style="background:linear-gradient(90deg, transparent, rgba(59,130,246,0.3) 20%, rgba(59,130,246,0.3) 80%, transparent)" />
+    <div class="h-px bg-gradient-to-r from-transparent via-[#2a3a4e]/60 to-transparent my-0.5"></div>
 
     <!-- Period -->
     <div>
-      <h3 class="text-[12px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Period</h3>
-      <div class="flex flex-wrap gap-1.5">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-[11px] font-bold text-[#a0b2c6] uppercase tracking-wider">Time Period</h3>
+      </div>
+      <div class="flex flex-wrap gap-1.5" role="group" aria-label="Time period">
         {#each periods as p}
           <button
-            style="border-radius:14px;padding:2px 10px;font-size:12px;font-weight:500;line-height:1.3;transition:all 0.15s ease;border:1px solid transparent"
-            class={chipClass(appState.filters.period === p.value)}
+            class="px-2.5 py-1 text-[11.5px] font-medium rounded-lg transition-all duration-150 border cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#67e8c6] {chipClass(appState.filters.period === p.value)}"
             onclick={() => handlePeriodSelect(p.value)}
+            aria-pressed={appState.filters.period === p.value}
           >
             {p.label}
           </button>
@@ -356,17 +401,19 @@
       </div>
     </div>
 
-    <hr class="border-0 h-px my-1" style="background:linear-gradient(90deg, transparent, rgba(59,130,246,0.3) 20%, rgba(59,130,246,0.3) 80%, transparent)" />
+    <div class="h-px bg-gradient-to-r from-transparent via-[#2a3a4e]/60 to-transparent my-0.5"></div>
 
     <!-- Sort -->
     <div>
-      <h3 class="text-[12px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Sort</h3>
-      <div class="flex flex-wrap gap-1.5">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-[11px] font-bold text-[#a0b2c6] uppercase tracking-wider">Sort Order</h3>
+      </div>
+      <div class="flex flex-wrap gap-1.5" role="group" aria-label="Sort order">
         {#each sortOptions as s}
           <button
-            style="border-radius:14px;padding:2px 10px;font-size:12px;font-weight:500;line-height:1.3;transition:all 0.15s ease;border:1px solid transparent"
-            class={chipClass(appState.filters.sort === s.value)}
+            class="px-2.5 py-1 text-[11.5px] font-medium rounded-lg transition-all duration-150 border cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#67e8c6] {chipClass(appState.filters.sort === s.value)}"
             onclick={() => handleSortSelect(s.value)}
+            aria-pressed={appState.filters.sort === s.value}
           >
             {s.label}
           </button>
@@ -374,45 +421,48 @@
       </div>
     </div>
 
-    <!-- NSFW toggles -->
-    <div class="border-t border-[#1a1b1e] pt-3">
-      <div class="flex items-center justify-between mb-2.5">
-        <span class="text-[13px] text-gray-300 font-medium">Show NSFW</span>
-        <button
-          class="w-11 h-6 rounded-full transition-all duration-200 relative {appState.filters.nsfw ? 'bg-[#2563eb]' : 'bg-[#3a3b40]'} hover:opacity-90"
-          onclick={toggleNsfw}
-          role="switch"
-          aria-checked={appState.filters.nsfw}
-          aria-label="Toggle NSFW content"
-        >
-          <span class="absolute top-[3px] w-[18px] h-[18px] rounded-full bg-white shadow transition-all duration-200
-            {appState.filters.nsfw ? 'left-[21px]' : 'left-[3px]'}"
-          ></span>
-        </button>
-      </div>
+    <!-- NSFW Toggles -->
+    <div class="border-t border-[#2a3a4e]/60 pt-3">
+      <div class="bg-[#131c29]/60 border border-[#2a3a4e]/50 rounded-xl p-3 flex flex-col gap-2.5">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-semibold text-[#ecf4fb]">Show NSFW</span>
+            {#if appState.filters.nsfw}
+              <span class="px-1.5 py-0.5 text-[9.5px] font-bold text-[#ffc982] bg-[#ffc982]/10 border border-[#ffc982]/30 rounded uppercase tracking-wider">18+</span>
+            {/if}
+          </div>
+          <button
+            class="w-10 h-5.5 rounded-full transition-all duration-200 relative p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#67e8c6] cursor-pointer {appState.filters.nsfw ? 'bg-[#ffc982]' : 'bg-[#1a2636] border border-[#2a3a4e]'}"
+            onclick={toggleNsfw}
+            role="switch"
+            aria-checked={appState.filters.nsfw}
+            aria-label="Toggle NSFW content"
+          >
+            <span class="block w-4 h-4 rounded-full shadow transition-transform duration-200 ease-out {appState.filters.nsfw ? 'translate-x-[18px] bg-[#0b1018]' : 'translate-x-0 bg-[#a0b2c6]'}"></span>
+          </button>
+        </div>
 
-      <div class="flex items-center justify-between">
-        <span class="text-[13px] text-gray-300 font-medium">Blur NSFW</span>
-        <button
-          class="w-11 h-6 rounded-full transition-all duration-200 relative {appState.nsfwBlurEnabled ? 'bg-[#2563eb]' : 'bg-[#3a3b40]'} hover:opacity-90"
-          onclick={toggleNsfwBlur}
-          role="switch"
-          aria-checked={appState.nsfwBlurEnabled}
-          aria-label="Toggle NSFW blur"
-        >
-          <span class="absolute top-[3px] w-[18px] h-[18px] rounded-full bg-white shadow transition-all duration-200
-            {appState.nsfwBlurEnabled ? 'left-[21px]' : 'left-[3px]'}"
-          ></span>
-        </button>
+        <div class="flex items-center justify-between border-t border-[#2a3a4e]/40 pt-2.5">
+          <span class="text-xs font-medium text-[#a0b2c6]">Blur NSFW Thumbnails</span>
+          <button
+            class="w-10 h-5.5 rounded-full transition-all duration-200 relative p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#67e8c6] cursor-pointer {appState.nsfwBlurEnabled ? 'bg-[#67e8c6]' : 'bg-[#1a2636] border border-[#2a3a4e]'}"
+            onclick={toggleNsfwBlur}
+            role="switch"
+            aria-checked={appState.nsfwBlurEnabled}
+            aria-label="Toggle NSFW blur"
+          >
+            <span class="block w-4 h-4 rounded-full shadow transition-transform duration-200 ease-out {appState.nsfwBlurEnabled ? 'translate-x-[18px] bg-[#0b1018]' : 'translate-x-0 bg-[#a0b2c6]'}"></span>
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- Early Access / Updated toggles -->
-    <div class="border-t border-[#1a1b1e] pt-3">
-      <span class="text-[13px] text-gray-300 font-medium mb-2 block">Quick Filters</span>
-      <div class="flex flex-wrap gap-1.5">
+    <!-- Quick Filters -->
+    <div class="border-t border-[#2a3a4e]/60 pt-3">
+      <h3 class="text-[11px] font-bold text-[#a0b2c6] uppercase tracking-wider mb-2">Quick Filters</h3>
+      <div class="flex flex-wrap gap-1.5" role="group" aria-label="Quick filters">
         <button
-          class="px-2.5 py-1 text-[12px] font-medium rounded-full border transition-all {chipClass(appState.filters.eaOnly)}"
+          class="px-2.5 py-1 text-[11.5px] font-medium rounded-lg border transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#67e8c6] {chipClass(appState.filters.eaOnly)}"
           onclick={() => {
             clearTimeout(debounceTimer);
             appState.filters.search = searchInput;
@@ -420,11 +470,12 @@
             appState.saveSettings();
             appState.triggerSearch();
           }}
+          aria-pressed={appState.filters.eaOnly}
         >
           Early Access
         </button>
         <button
-          class="px-2.5 py-1 text-[12px] font-medium rounded-full border transition-all {chipClass(appState.filters.updatedOnly)}"
+          class="px-2.5 py-1 text-[11.5px] font-medium rounded-lg border transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#67e8c6] {chipClass(appState.filters.updatedOnly)}"
           onclick={() => {
             clearTimeout(debounceTimer);
             appState.filters.search = searchInput;
@@ -432,18 +483,22 @@
             appState.saveSettings();
             appState.triggerSearch();
           }}
+          aria-pressed={appState.filters.updatedOnly}
         >
-          Updated Last 48h
+          Updated (48h)
         </button>
       </div>
     </div>
 
-    <!-- Only Installed Toggle -->
-    <div class="border-t border-[#1a1b1e] pt-3">
+    <!-- Additional Settings Toggles -->
+    <div class="border-t border-[#2a3a4e]/60 pt-3 space-y-2.5">
       <div class="flex items-center justify-between">
-        <span class="text-[13px] text-gray-300 font-medium">Only Installed</span>
+        <div class="flex flex-col">
+          <span class="text-xs font-semibold text-[#ecf4fb]">Only Installed</span>
+          <span class="text-[10px] text-[#a0b2c6]">Local models only</span>
+        </div>
         <button
-          class="w-11 h-6 rounded-full transition-all duration-200 relative {appState.onlyInstalled ? 'bg-[#22c55e]' : 'bg-[#3a3b40]'} hover:opacity-90"
+          class="w-10 h-5.5 rounded-full transition-all duration-200 relative p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#67e8c6] cursor-pointer {appState.onlyInstalled ? 'bg-[#67e8c6]' : 'bg-[#1a2636] border border-[#2a3a4e]'}"
           onclick={() => {
             appState.onlyInstalled = !appState.onlyInstalled;
             appState.saveSettings();
@@ -452,35 +507,31 @@
           aria-checked={appState.onlyInstalled}
           aria-label="Show only locally installed models"
         >
-          <span class="absolute top-[3px] w-[18px] h-[18px] rounded-full bg-white shadow transition-all duration-200
-            {appState.onlyInstalled ? 'left-[21px]' : 'left-[3px]'}"
-          ></span>
+          <span class="block w-4 h-4 rounded-full shadow transition-transform duration-200 ease-out {appState.onlyInstalled ? 'translate-x-[18px] bg-[#0b1018]' : 'translate-x-0 bg-[#a0b2c6]'}"></span>
         </button>
       </div>
-    </div>
 
-    <!-- Fast Search Toggle -->
-    <div class="border-t border-[#1a1b1e] pt-3">
-      <div class="flex items-center justify-between">
-        <span class="text-[13px] text-gray-300 font-medium">Fast Search</span>
+      <div class="flex items-center justify-between border-t border-[#2a3a4e]/40 pt-2.5">
+        <div class="flex flex-col">
+          <span class="text-xs font-semibold text-[#ecf4fb]">Fast Search</span>
+          <span class="text-[10px] text-[#a0b2c6]">Bypass time period limit</span>
+        </div>
         <button
-          class="w-11 h-6 rounded-full transition-all duration-200 relative {appState.fastSearch ? 'bg-[#2563eb]' : 'bg-[#3a3b40]'} hover:opacity-90"
+          class="w-10 h-5.5 rounded-full transition-all duration-200 relative p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#67e8c6] cursor-pointer {appState.fastSearch ? 'bg-[#b7a4ff]' : 'bg-[#1a2636] border border-[#2a3a4e]'}"
           onclick={() => { appState.fastSearch = !appState.fastSearch; appState.saveSettings(); }}
           role="switch"
           aria-checked={appState.fastSearch}
           aria-label="Use AllTime period for search-box queries (keeps other filters intact)"
         >
-          <span class="absolute top-[3px] w-[18px] h-[18px] rounded-full bg-white shadow transition-all duration-200
-            {appState.fastSearch ? 'left-[21px]' : 'left-[3px]'}"
-          ></span>
+          <span class="block w-4 h-4 rounded-full shadow transition-transform duration-200 ease-out {appState.fastSearch ? 'translate-x-[18px] bg-[#0b1018]' : 'translate-x-0 bg-[#a0b2c6]'}"></span>
         </button>
       </div>
     </div>
 
     <!-- License Popup -->
     {#if licensePopup}
-      <div class="border-t border-[#1a1b1e] pt-3 relative">
-        <div class="flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-300 {licensePopup.type === 'ok' ? 'bg-[#1e3226] text-[#22c55e] border border-[#2f9e44]/40' : 'bg-[#2c1a1a] text-[#ff6b6b] border border-[#e03131]/40'}">
+      <div class="border-t border-[#2a3a4e]/60 pt-3 relative">
+        <div class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all duration-300 {licensePopup.type === 'ok' ? 'bg-[#67e8c6]/10 text-[#67e8c6] border border-[#67e8c6]/30' : 'bg-[#ff6b6b]/10 text-[#ff6b6b] border border-[#ff6b6b]/30'}">
           <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             {#if licensePopup.type === 'ok'}
               <path d="M20 6L9 17l-5-5"/>
@@ -493,53 +544,59 @@
       </div>
     {/if}
 
-    <!-- API Key -->
-    <div class="border-t border-[#1a1b1e] pt-3">
-      <div class="flex items-center gap-2">
-        <span class="text-[13px] text-gray-300 font-medium">civitai.red API Key</span>
-        {#if apiKeyValidationStatus === 'valid'}
-          <span class="text-[10px] font-semibold uppercase tracking-wide text-[#22c55e] bg-[#1e3226] border border-[#2f9e44]/40 rounded-full px-2 py-0.5 leading-none">valid</span>
-        {:else if apiKeyValidationStatus === 'invalid'}
-          <span class="text-[10px] font-semibold uppercase tracking-wide text-[#ff6b6b] bg-[#2c1a1a] border border-[#e03131]/40 rounded-full px-2 py-0.5 leading-none">invalid</span>
-        {/if}
-      </div>
-      <div class="relative flex items-center gap-2 mt-2" role="group" onmouseenter={startApiKeyTip} onmouseleave={stopApiKeyTip}>
-        <input
-          type="password"
-          placeholder="Enter API key..."
-          class="flex-1 px-3 py-1.5 text-sm bg-[#1a1b1e] border border-[#2a2b30] rounded-lg text-white
-            placeholder-gray-500 outline-none focus:border-[#2563eb] transition-all duration-200"
-          bind:value={apiKeyInput}
-          oninput={handleKeyChange}
-          aria-describedby="api-key-delete-tip"
-        />
-        {#if showApiKeyTip}
-          <div
-            id="api-key-delete-tip"
-            role="tooltip"
-            class="absolute left-0 bottom-[calc(100%+8px)] z-30 w-full rounded-lg border border-[#3b82f6]/35 bg-[#101827]/95 px-3 py-2 text-[11px] leading-4 text-[#cbd5e1] shadow-xl backdrop-blur"
-          >
-            Type "delete" to remove your saved API key from extension storage.
+    <!-- API Key Container -->
+    <div class="border-t border-[#2a3a4e]/60 pt-3">
+      <div class="bg-[#131c29]/70 border border-[#2a3a4e]/60 rounded-xl p-3 space-y-2">
+        <div class="flex items-center justify-between gap-2">
+          <label for="civitai-api-key" class="text-xs font-semibold text-[#ecf4fb]">civitai.red API Key</label>
+          {#if apiKeyValidationStatus === 'valid'}
+            <span class="text-[9.5px] font-extrabold uppercase tracking-wider text-[#67e8c6] bg-[#67e8c6]/15 border border-[#67e8c6]/30 rounded-md px-1.5 py-0.5 leading-none">valid</span>
+          {:else if apiKeyValidationStatus === 'invalid'}
+            <span class="text-[9.5px] font-extrabold uppercase tracking-wider text-[#ff6b6b] bg-[#ff6b6b]/15 border border-[#ff6b6b]/30 rounded-md px-1.5 py-0.5 leading-none">invalid</span>
+          {:else if apiKeyValidationStatus === 'checking'}
+            <span class="text-[9.5px] font-extrabold uppercase tracking-wider text-[#b7a4ff] bg-[#b7a4ff]/15 border border-[#b7a4ff]/30 rounded-md px-1.5 py-0.5 leading-none animate-pulse">checking</span>
+          {/if}
+        </div>
+        <div class="relative flex items-center gap-2" role="group" onmouseenter={startApiKeyTip} onmouseleave={stopApiKeyTip}>
+          <input
+            id="civitai-api-key"
+            type="password"
+            placeholder="Enter API key..."
+            class="w-full px-3 py-1.5 text-xs bg-[#1a2636] border border-[#2a3a4e] rounded-lg text-[#ecf4fb]
+              placeholder-[#a0b2c6]/50 outline-none focus:border-[#67e8c6] focus:ring-1 focus:ring-[#67e8c6] transition-all duration-200"
+            bind:value={apiKeyInput}
+            oninput={handleKeyChange}
+            aria-describedby="api-key-delete-tip"
+          />
+          {#if showApiKeyTip}
+            <div
+              id="api-key-delete-tip"
+              role="tooltip"
+              class="absolute left-0 bottom-[calc(100%+8px)] z-30 w-full rounded-xl border border-[#67e8c6]/40 bg-[#131c29]/95 px-3 py-2 text-[11px] leading-4 text-[#ecf4fb] shadow-2xl backdrop-blur-md"
+            >
+              Type "delete" to remove your saved API key from extension storage.
+            </div>
+          {/if}
+        </div>
+        {#if appState.licenseActive}
+          <div class="flex items-center gap-1.5 pt-0.5">
+            <svg class="w-3.5 h-3.5 text-[#67e8c6]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+            <span class="text-[11px] text-[#67e8c6] font-semibold">License Active</span>
           </div>
         {/if}
-      </div>
-      {#if appState.licenseActive}
-        <div class="flex items-center gap-1.5 mt-1.5">
-          <svg class="w-3 h-3 text-[#22c55e]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
-          <span class="text-[11px] text-[#22c55e] font-medium">Licensed</span>
+        <div class="flex items-center gap-1.5 pt-0.5">
+          <svg class="w-3.5 h-3.5 text-[#ffc982] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>
+          </svg>
+          <a href="https://ko-fi.com/empulse75" target="_blank" rel="noopener" class="text-[11px] text-[#a0b2c6] hover:text-[#ffc982] transition-colors no-underline font-medium">Buy me a beer?</a>
         </div>
-      {/if}
-      <div class="flex items-center gap-1.5 mt-1.5">
-        <svg class="w-3 h-3 text-[#a1a1aa] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>
-        </svg>
-        <a href="https://ko-fi.com/empulse75" target="_blank" rel="noopener" class="text-[11px] text-gray-500 hover:text-[#f59f00] transition-colors no-underline">Buy me a beer?</a>
       </div>
     </div>
 
+    <!-- Clear Filters Button -->
     <button
-      class="w-full py-2 text-[13px] text-gray-500 hover:text-white bg-[#1a1b1e] hover:bg-[#2a2b30]
-        rounded-lg transition-colors duration-200 font-medium"
+      class="w-full py-2.5 text-xs text-[#a0b2c6] hover:text-[#ecf4fb] bg-[#1a2636] hover:bg-[#223246] border border-[#2a3a4e]
+        rounded-xl transition-all duration-150 font-semibold shadow-sm active:scale-[0.99] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#67e8c6]"
       onclick={() => {
         appState.clearFilters();
         searchInput = "";
@@ -549,10 +606,14 @@
       Clear Filters
     </button>
 
+    <!-- Downloads Container -->
     {#if appState.hasActiveDownloads}
-      <div class="border-t border-[#1a1b1e] pt-3">
-        <span class="text-[13px] text-gray-300 font-medium">Downloads</span>
-        <div class="mt-2 flex flex-col gap-2 mr-0.5" role="list">
+      <div class="border-t border-[#2a3a4e]/60 pt-3">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[11px] font-bold text-[#a0b2c6] uppercase tracking-wider">Active Downloads</span>
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#67e8c6]/15 text-[#67e8c6] border border-[#67e8c6]/30">{appState.activeDownloads.length}</span>
+        </div>
+        <div class="flex flex-col gap-2" role="list">
           {#each appState.activeDownloads as dl, i (dl.id)}
             {@const isRunning = dl.status === "downloading"}
             {@const isQueued = dl.status === "queued" || dl.status === "pending"}
@@ -560,7 +621,7 @@
             {@const etaStr = isRunning && dl.etaSec ? `ETA ${fmtEta(dl.etaSec)}` : ""}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
-              class="bg-[#1a1b1e] rounded-lg p-2 border border-[#2a2b30] cursor-grab active:cursor-grabbing transition-opacity {dragIdx === i ? 'opacity-40' : ''}"
+              class="bg-[#131c29] rounded-xl p-2.5 border border-[#2a3a4e] cursor-grab active:cursor-grabbing transition-all duration-150 hover:border-[#2a3a4e]/90 {dragIdx === i ? 'opacity-40 scale-[0.98]' : ''}"
               draggable="true"
               role="listitem"
               ondragstart={() => { dragIdx = i; }}
@@ -568,34 +629,35 @@
               ondragover={(e) => { e.preventDefault(); e.dataTransfer!.dropEffect = "move"; }}
               ondrop={() => { if (dragIdx !== null && dragIdx !== i) { appState.reorderDownloads(dragIdx, i); } dragIdx = null; }}
             >
-              <div class="flex items-center justify-between mb-1">
-                <span class="text-[11px] text-gray-300 truncate flex-1 mr-2" title={dl.fileName}>{dl.fileName}</span>
+              <div class="flex items-center justify-between mb-1.5 gap-2">
+                <span class="text-[11.5px] font-medium text-[#ecf4fb] truncate flex-1" title={dl.fileName}>{dl.fileName}</span>
                 <div class="flex items-center gap-1.5 shrink-0">
                   {#if isQueued}
-                    <span class="text-[11px] text-[#f59f00] font-medium">#{i + 1} queued</span>
+                    <span class="text-[10px] text-[#ffc982] font-bold bg-[#ffc982]/10 border border-[#ffc982]/30 px-1.5 py-0.5 rounded">#{i + 1} queued</span>
                   {:else if speedStr}
-                    <span class="text-[11px] text-[#60a5fa] font-medium">{speedStr}</span>
+                    <span class="text-[10px] text-[#67e8c6] font-bold bg-[#67e8c6]/10 border border-[#67e8c6]/30 px-1.5 py-0.5 rounded">{speedStr}</span>
                   {/if}
                   <button
-                    class="w-4 h-4 rounded-full flex items-center justify-center text-[#71717a] hover:text-white hover:bg-[#e03131] transition-colors cursor-pointer"
+                    class="w-4.5 h-4.5 rounded-full flex items-center justify-center text-[#a0b2c6] hover:text-white hover:bg-[#ff6b6b] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#ff6b6b]"
                     title="Cancel download"
                     onclick={async (e) => { e.stopPropagation(); try { await deleteDownload(dl.id); } catch (error) { console.error("[CivBro] Cancel download failed", error); } }}
                     aria-label="Cancel download"
                   >
-                    <svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
                   </button>
                 </div>
               </div>
               {#if isRunning}
-                <div class="h-1 rounded-full bg-[#2a2b30] overflow-hidden mb-1">
-                  <div class="h-full rounded-full bg-[#2563eb] transition-all duration-500" style="width:{dl.progress}%"></div>
+                <div class="h-1.5 rounded-full bg-[#1a2636] overflow-hidden mb-1.5 border border-[#2a3a4e]/40">
+                  <div class="h-full rounded-full bg-gradient-to-r from-[#67e8c6] to-[#b7a4ff] transition-all duration-500" style="width:{dl.progress}%"></div>
                 </div>
-                <div class="text-[10px] text-[#a1a1aa]">
-                  {fmtBytes(dl.bytesDownloaded || 0)}/{fmtBytes(dl.bytesTotal || 0)} · {dl.progress}%{speedStr ? ` · ${speedStr}` : ""}{etaStr ? ` · ${etaStr}` : ""}
+                <div class="text-[10px] text-[#a0b2c6] flex items-center justify-between font-mono">
+                  <span>{fmtBytes(dl.bytesDownloaded || 0)} / {fmtBytes(dl.bytesTotal || 0)}</span>
+                  <span>{dl.progress}%{etaStr ? ` · ${etaStr}` : ""}</span>
                 </div>
               {:else if isQueued}
-                <div class="h-1 rounded-full bg-[#2a2b30] overflow-hidden">
-                  <div class="h-full rounded-full bg-[#f59f00]/40" style="width:100%"></div>
+                <div class="h-1 rounded-full bg-[#1a2636] overflow-hidden">
+                  <div class="h-full rounded-full bg-[#ffc982]/40" style="width:100%"></div>
                 </div>
               {/if}
             </div>

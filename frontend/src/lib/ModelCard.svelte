@@ -39,10 +39,10 @@
   let cardStyle = $derived.by(() => {
     const base = "aspect-ratio:7/9; content-visibility:auto; contain-intrinsic-size:285px 366px;";
     if (frame) {
-      const glow = frameGlow ? `box-shadow:0 0 4px 1px rgba(255,255,255,0.12);` : "";
-      return `${base}border:6px solid transparent; border-radius:8px; background: linear-gradient(#1a1b1e,#1a1b1e) padding-box, ${frame} border-box;${glow}`;
+      const glow = frameGlow ? `box-shadow:0 0 8px 2px rgba(255,255,255,0.18);` : "";
+      return `${base}border:6px solid transparent; border-radius:16px; background: linear-gradient(var(--civ-panel,#131c29),var(--civ-panel,#131c29)) padding-box, ${frame} border-box;${glow}`;
     }
-    return base;
+    return `${base}border:1px solid var(--civ-border,rgba(42,58,78,0.6)); border-radius:18px; background:var(--civ-panel,#131c29);`;
   });
 
   let imageRevealed = $state(false);
@@ -134,8 +134,8 @@
         if (dls[id].modelId === model.id && (dls[id].status === "pending" || dls[id].status === "queued" || dls[id].status === "downloading")) {
           try {
             await deleteDownload(id);
-        } catch (e) {
-          console.warn("[CivBro] cardDownload cancel failed:", e);
+          } catch (e) {
+            console.warn("[CivBro] cardDownload cancel failed:", e);
           }
         }
       }
@@ -352,8 +352,6 @@
   // the clip's own first frame as a placeholder (with the ▶ indicator) until it
   // starts playing. Only near-viewport clips ever load, so the grid stays light.
   function bgAutoVideo(node: HTMLVideoElement, src: string) {
-    // Set src immediately so the first frame / poster shows at page load.
-    // Only play/pause is gated by viewport visibility.
     if (src && !node.src) node.src = src;
 
     let inView = false;
@@ -397,9 +395,18 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
 <div
-  class="civ-card group relative overflow-clip cursor-pointer"
+  class="civ-card group relative overflow-hidden cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--civ-accent,#67e8c6)]"
   style={`${cardStyle}${lightTextureStyle}`}
   onclick={handleClick}
+  onkeydown={(e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleClick();
+    }
+  }}
+  role="button"
+  tabindex="0"
+  aria-label={model.name}
   data-testid="model-card"
   data-base-model={model.baseModel || ""}
   data-cosmetic={frame ? "1" : "0"}
@@ -411,8 +418,8 @@
   {#if imageUrl && !imageError}
     {#if getPrimaryImageType() === "video"}
       <video
-        class="civ-card-media absolute inset-0 w-full h-full object-cover object-top transition-all duration-300
-          {shouldBlur ? 'blur-[12px] scale-110' : 'blur-0 scale-100'}"
+        class="civ-card-media absolute inset-0 w-full h-full object-cover object-top transition-all duration-500 group-hover:scale-105
+          {shouldBlur ? 'blur-[16px] scale-110' : 'blur-0'}"
         use:bgAutoVideo={imageUrl}
         poster={model.poster || undefined}
         loop
@@ -422,16 +429,16 @@
         onerror={handleImageError}
       ></video>
       {#if !videoPlaying}
-        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div class="w-11 h-11 rounded-full bg-black/45 flex items-center justify-center">
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+          <div class="w-11 h-11 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center border border-white/20 shadow-lg">
             <svg class="w-5 h-5 text-white ml-0.5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
           </div>
         </div>
       {/if}
     {:else}
       <img
-        class="civ-card-media absolute inset-0 w-full h-full object-cover object-top transition-all duration-300
-          {shouldBlur ? 'blur-[12px] scale-110' : 'blur-0 scale-100'}"
+        class="civ-card-media absolute inset-0 w-full h-full object-cover object-top transition-all duration-500 group-hover:scale-105
+          {shouldBlur ? 'blur-[16px] scale-110' : 'blur-0'}"
         src={imageUrl}
         alt={model.name}
         loading="lazy"
@@ -440,40 +447,40 @@
       />
     {/if}
   {:else}
-    <div class="absolute inset-0 bg-[#1a1b1e] flex items-center justify-center">
-      <div class="text-gray-500 text-2xl">?</div>
+    <div class="absolute inset-0 bg-[var(--civ-panel-raised,#1a2636)] flex items-center justify-center">
+      <div class="text-[var(--civ-muted,#a0b2c6)] text-2xl font-bold">?</div>
     </div>
   {/if}
 
   {#if shouldBlur}
     <div
-      class="absolute inset-0 bg-black/30 flex flex-col items-center justify-center gap-2 cursor-pointer"
+      class="absolute inset-0 bg-black/75 backdrop-blur-md flex flex-col items-center justify-center gap-2 cursor-pointer z-10"
       onclick={(e) => { e.stopPropagation(); imageRevealed = true; }}
       onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); imageRevealed = true; } }}
       role="button"
       tabindex="0"
       aria-label="Reveal NSFW content"
     >
-      <span class="text-white text-xs font-medium bg-red-600/80 px-2 py-1 rounded-full">
+      <span class="text-white text-xs font-bold bg-rose-600/90 px-3 py-1 rounded-full shadow-md tracking-wide uppercase">
         NSFW
       </span>
-      <span class="text-gray-300 text-xs">Click to reveal</span>
+      <span class="text-white/80 text-xs font-medium bg-black/40 px-2.5 py-0.5 rounded-full backdrop-blur-sm">Click to reveal</span>
     </div>
   {/if}
 
-  <!-- type + base-model family pill (top-left): translucent, non-blurred, wraps -->
-  <div class="absolute top-2.5 left-2.5 flex flex-wrap items-start gap-1.5 pr-12 pointer-events-none z-0" style="max-width:calc(100% - 48px)">
+  <!-- type + base-model family pill (top-left) -->
+  <div class="absolute top-2.5 left-2.5 flex flex-wrap items-start gap-1.5 pr-12 pointer-events-none z-10" style="max-width:calc(100% - 48px)">
     {#if typeLabel}
-      <span class="inline-flex flex-wrap items-center text-[14px] font-bold uppercase tracking-wide text-white bg-black/45 rounded-full" style="padding:4px 10px;line-height:18px">
+      <span class="inline-flex flex-wrap items-center text-[12px] font-bold uppercase tracking-wider text-white bg-black/60 backdrop-blur-md border border-white/15 rounded-full px-2.5 py-1 shadow-sm">
         <span>{typeLabel}</span>
         {#if familyItems.length}
-          <span class="opacity-30">&nbsp;|&nbsp;</span>
+          <span class="opacity-40">&nbsp;|&nbsp;</span>
           {#each familyItems as f, i (f.label || 'family-' + i)}
             {#if i > 0}<span class="opacity-50">,&nbsp;</span>{/if}
             {#if f.pony}
-              <svg class="w-[18px] h-[18px] inline-block -my-px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Pony"><title>Pony</title><path d="M7 10l-.85 8.507a1.357 1.357 0 0 0 1.35 1.493h.146a2 2 0 0 0 1.857 -1.257l.994 -2.486a2 2 0 0 1 1.857 -1.257h1.292a2 2 0 0 1 1.857 1.257l.994 2.486a2 2 0 0 0 1.857 1.257h.146a1.37 1.37 0 0 0 1.364 -1.494l-.864 -9.506h-8c0 -3 -3 -5 -6 -5l-3 6l2 2l3 -2z"/><path d="M22 14v-2a3 3 0 0 0 -3 -3"/></svg>
+              <svg class="w-4 h-4 inline-block -my-px text-[var(--civ-warm,#ffc982)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Pony"><title>Pony</title><path d="M7 10l-.85 8.507a1.357 1.357 0 0 0 1.35 1.493h.146a2 2 0 0 0 1.857 -1.257l.994 -2.486a2 2 0 0 1 1.857 -1.257h1.292a2 2 0 0 1 1.857 1.257l.994 2.486a2 2 0 0 0 1.857 1.257h.146a1.37 1.37 0 0 0 1.364 -1.494l-.864 -9.506h-8c0 -3 -3 -5 -6 -5l-3 6l2 2l3 -2z"/><path d="M22 14v-2a3 3 0 0 0 -3 -3"/></svg>
             {:else}
-              <span class="normal-case">{f.label}</span>
+              <span class="normal-case text-white/90">{f.label}</span>
             {/if}
           {/each}
           {#if familyOverflow > 0}<span class="opacity-70 ml-1">+{familyOverflow}</span>{/if}
@@ -481,41 +488,35 @@
       </span>
     {/if}
     {#if isEarlyAccess}
-      <span class="inline-flex items-center text-[14px] font-bold uppercase tracking-wide text-white bg-[#3acd84] rounded-full" style="padding:4px 10px;line-height:18px">Early Access</span>
+      <span class="inline-flex items-center text-[11px] font-bold uppercase tracking-wider text-[#0b1018] bg-[var(--civ-accent,#67e8c6)] rounded-full px-2.5 py-1 shadow-sm">Early Access</span>
     {:else if isUpdated}
-      <span class="inline-flex items-center text-[14px] font-bold uppercase tracking-wide text-white bg-[#3acd84] rounded-full" style="padding:4px 10px;line-height:18px">Updated</span>
+      <span class="inline-flex items-center text-[11px] font-bold uppercase tracking-wider text-[#0b1018] bg-[var(--civ-accent,#67e8c6)] rounded-full px-2.5 py-1 shadow-sm">Updated</span>
     {/if}
   </div>
 
   <!-- download button top-right -->
-  <div class="absolute top-2 right-2 z-10">
+  <div class="absolute top-2.5 right-2.5 z-20">
     <DownloadButton status={dlStatus} label={dlLabel} onclick={cardDownload} />
   </div>
 
-  <div
-    class="creator-strip absolute bottom-0 left-0 right-0 pointer-events-none"
-  >
-    <div class="flex items-center gap-2 mb-1">
-      <div class="relative shrink-0" style="width:38.4px;height:38.4px;">
+  <div class="creator-strip absolute bottom-0 left-0 right-0 pointer-events-none z-10 bg-gradient-to-t from-black/95 via-black/75 to-transparent pt-14 pb-3.5 px-3.5 flex flex-col justify-end">
+    <div class="flex items-center gap-2 mb-1.5">
+      <div class="relative shrink-0 w-8 h-8">
         {#if model.creator?.image}
           <img
-            class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full object-cover border border-white/25"
-            style="width:38.4px;height:38.4px;"
+            class="absolute inset-0 w-full h-full rounded-full object-cover border border-white/30 shadow-sm"
             src={model.creator.image}
             alt={model.creator.username}
           />
         {:else}
-          <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#2a2b30] flex items-center justify-center text-[14px] text-gray-300 border border-white/25" style="width:38.4px;height:38.4px;">
+          <div class="absolute inset-0 rounded-full bg-[var(--civ-panel-raised,#1a2636)] flex items-center justify-center text-xs font-semibold text-white/80 border border-white/20">
             {model.creator?.username?.charAt(0)?.toUpperCase() || "?"}
           </div>
         {/if}
         {#if model.avatarDeco}
-          <div
-            class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
-            style="width:45.6px;height:45.6px;"
-          >
+          <div class="absolute -inset-1 pointer-events-none">
             <img
-              style="width:100%;height:100%;object-fit:contain;"
+              class="w-full h-full object-contain"
               src={model.avatarDeco}
               alt=""
               onerror={(e) => ((e.currentTarget as HTMLImageElement).style.opacity = '0')}
@@ -524,14 +525,14 @@
         {/if}
       </div>
       <span
-        class="text-[15px] font-medium truncate"
-        style="{nameStyle || 'color:rgb(254,254,254)'};text-shadow:0 1px 2px rgba(0,0,0,0.95)"
+        class="text-sm font-semibold truncate drop-shadow-md"
+        style="{nameStyle || 'color:rgb(240,246,252)'}"
       >
         {model.creator?.username || "Unknown"}
       </span>
       {#if model.badge}
         <img
-          class="h-[33.6px] w-auto shrink-0"
+          class="h-7 w-auto shrink-0 drop-shadow-sm"
           style="object-fit:contain;"
           src={model.badge}
           alt=""
@@ -540,38 +541,38 @@
       {/if}
     </div>
 
-    <p class="text-[21px] font-bold text-white leading-[26px] line-clamp-2" style="text-shadow:0 1px 2px rgba(0,0,0,0.95)">{model.name}</p>
+    <p class="text-lg font-bold text-[#ecf4fb] leading-snug line-clamp-2 drop-shadow-md group-hover:text-[var(--civ-accent,#67e8c6)] transition-colors duration-200">{model.name}</p>
 
-    <div class="flex items-center gap-1.5 mt-1.5 flex-wrap">
-      <div class="inline-flex items-center gap-2 bg-black/35 rounded-full text-white/90 text-[14px] font-bold" style="padding:4px 10px;line-height:18px">
+    <div class="flex items-center gap-1.5 mt-2 flex-wrap">
+      <div class="inline-flex items-center gap-2 bg-black/50 backdrop-blur-md border border-white/10 rounded-full px-2.5 py-1 text-xs text-white/90 font-semibold shadow-sm">
         {#if downloadCount}
-          <span class="inline-flex items-center gap-0.5">
-            <svg class="w-[16px] h-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span class="inline-flex items-center gap-1 text-[var(--civ-accent,#67e8c6)]">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             {downloadCount}
           </span>
         {/if}
         {#if collections > 0}
-          <span class="inline-flex items-center gap-0.5">
-            <svg class="w-[16px] h-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+          <span class="inline-flex items-center gap-1 text-[var(--civ-violet,#b7a4ff)]">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
             {fmtCount(collections)}
           </span>
         {/if}
         {#if comments > 0}
-          <span class="inline-flex items-center gap-0.5">
-            <svg class="w-[16px] h-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+          <span class="inline-flex items-center gap-1 text-sky-300">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
             {fmtCount(comments)}
           </span>
         {/if}
         {#if buzz > 0}
-          <span class="inline-flex items-center gap-0.5">
-            <svg class="w-[14px] h-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <span class="inline-flex items-center gap-0.5 text-amber-300">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
             {fmtCount(buzz)}
           </span>
         {/if}
       </div>
       {#if likes > 0}
-        <div class="inline-flex items-center gap-1 bg-black/35 rounded-full text-[#fd7f38] text-[14px] font-bold" style="padding:4px 10px;line-height:18px">
-          <svg class="w-[14px] h-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/></svg>
+        <div class="inline-flex items-center gap-1 bg-black/50 backdrop-blur-md border border-white/10 rounded-full px-2.5 py-1 text-xs text-[var(--civ-warm,#ffc982)] font-semibold shadow-sm">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/></svg>
           {fmtCount(likes)}
         </div>
       {/if}
@@ -582,11 +583,8 @@
 <style>
   .civ-card {
     isolation: isolate;
-    transition: transform 260ms cubic-bezier(.2,.8,.2,1), box-shadow 260ms ease;
-  }
-
-  .creator-strip {
-    padding: 8px 14px 14px;
+    border-radius: 18px;
+    transition: transform 280ms var(--civ-ease, cubic-bezier(.2,.8,.2,1)), box-shadow 280ms var(--civ-ease, cubic-bezier(.2,.8,.2,1));
   }
 
   .civ-card::after {
@@ -598,24 +596,25 @@
     border-radius: inherit;
     opacity: 0;
     --halo-angle: 0deg;
-    background: conic-gradient(from var(--halo-angle), transparent 0 8%, #55d7ff 15%, #fff 23%, #a855f7 34%, transparent 45% 58%, #ffd166 68%, #ff4ecd 78%, #4de7ff 90%, transparent 100%);
-    filter: saturate(1.5) brightness(1.4) drop-shadow(0 0 10px rgb(85 215 255 / .9));
+    background: conic-gradient(from var(--halo-angle), transparent 0 8%, #67e8c6 15%, #fff 23%, #b7a4ff 34%, transparent 45% 58%, #ffc982 68%, #ff4ecd 78%, #67e8c6 90%, transparent 100%);
+    filter: saturate(1.4) brightness(1.3) drop-shadow(0 0 10px rgba(103, 232, 198, 0.7));
     pointer-events: none;
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask-composite: xor;
     mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     mask-composite: exclude;
+    transition: opacity 280ms ease;
   }
 
   .civ-card:hover {
     z-index: 30;
-    transform: translateY(-10px) scale(1.018);
-    box-shadow: 0 20px 34px rgb(0 0 0 / .55), 0 0 28px rgb(78 197 255 / .35);
+    transform: translateY(-8px) scale(1.015);
+    box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.65), 0 0 24px -4px rgba(103, 232, 198, 0.25);
   }
 
   .civ-card:hover::after {
     opacity: 1;
-    animation: card-halo-spin 1.35s linear infinite;
+    animation: card-halo-spin 1.4s linear infinite;
   }
 
   @keyframes card-halo-spin {
@@ -633,7 +632,7 @@
     inset: 0;
     z-index: 20;
     padding: 6px;
-    border-radius: 8px;
+    border-radius: inherit;
     filter: brightness(var(--light-brightness));
     pointer-events: none;
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
@@ -656,6 +655,6 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .civ-card, .civ-card::after { transition: none; animation: none !important; }
+    .civ-card, .civ-card::after, .civ-card-media { transition: none !important; animation: none !important; transform: none !important; }
   }
 </style>

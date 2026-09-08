@@ -16,27 +16,25 @@
   const isUnlocked = $derived(status === "buzzUnlocked");
 
   let btnClass = $derived.by(() => {
-    let cls = "w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm border text-white flex items-center justify-center transition-all cursor-pointer ";
-    if (spinner) return cls + "bg-[#e03131]/40 border-[#e03131] hover:bg-[#e03131] hover:border-[#e03131] hover:text-white";
-    if (isLocked) return cls + "border-[#fab005] text-[#fab005] hover:bg-[#fab005] hover:text-[#1a1b1e]";
-    if (isApiLocked) return cls + "border-[#dc2626] text-[#dc2626] hover:bg-[#dc2626] hover:text-white";
-    if (isUnlocked) return cls + "border-[#fab005] text-[#fab005] hover:bg-[#fab005] hover:text-[#1a1b1e]";
-    if (isDone) return cls + "border-[#22c55e] text-[#22c55e] hover:bg-[#dc2626] hover:border-[#dc2626] hover:text-white";
-    return cls + "border-white/10 hover:bg-[#2563eb] hover:border-[#2563eb]";
+    let cls = "civ-download-btn relative w-9 h-9 rounded-full bg-black/60 backdrop-blur-md border text-white flex items-center justify-center transition-all duration-200 cursor-pointer shadow-md hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--civ-accent,#67e8c6)] ";
+    if (spinner) return cls + "bg-[#e03131]/40 border-[#e03131] hover:bg-[#e03131] hover:border-[#e03131] text-white shadow-[0_0_12px_rgba(224,49,49,0.5)]";
+    if (isLocked) return cls + "border-[#fab005] text-[#fab005] bg-[#fab005]/15 hover:bg-[#fab005] hover:text-[#0b1018] hover:border-[#fab005] shadow-[0_0_12px_rgba(250,176,5,0.3)]";
+    if (isApiLocked) return cls + "border-[#ef4444] text-[#ef4444] bg-[#ef4444]/15 hover:bg-[#ef4444] hover:text-white hover:border-[#ef4444]";
+    if (isUnlocked) return cls + "border-[#fab005] text-[#fab005] bg-[#fab005]/15 hover:bg-[#fab005] hover:text-[#0b1018]";
+    if (isDone) return cls + "border-[#22c55e] text-[#22c55e] bg-[#22c55e]/15 hover:bg-[#ef4444] hover:border-[#ef4444] hover:text-white shadow-[0_0_10px_rgba(34,197,94,0.3)]";
+    return cls + "border-white/20 text-white/90 hover:bg-[var(--civ-accent,#67e8c6)] hover:border-[var(--civ-accent,#67e8c6)] hover:text-[#0b1018] hover:shadow-[0_0_14px_rgba(103,232,198,0.5)]";
   });
 </script>
 
-<div
+<button
+  type="button"
   class={btnClass}
   onclick={onclick}
-  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onclick(e); } }}
-  role="button"
-  tabindex="0"
   aria-label={label}
   title={label}
 >
   {#if spinner}
-    <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
       <path d="M21 12a9 9 0 11-6.2-8.6"/>
     </svg>
   {:else if isLocked || isApiLocked}
@@ -51,12 +49,12 @@
       <path d="M12 15v2" fill="none" stroke="currentColor" stroke-width="2"/>
     </svg>
   {:else if isDone}
-    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
       <polyline points="20 6 9 17 4 12"/>
     </svg>
   {:else}
-    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
       <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
     </svg>
   {/if}
-</div>
+</button>

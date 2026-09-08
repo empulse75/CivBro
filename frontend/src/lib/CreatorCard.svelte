@@ -32,7 +32,7 @@
   ].filter((metric) => metric.value > 0));
 </script>
 
-<div class="creator-card" data-testid="creator">
+<div class="creator-card group" data-testid="creator">
   <div class="creator-card__hero">
     {#if model.profileBackground?.type === "video"}
       <video class="creator-card__background" src={model.profileBackground.url} autoplay loop muted playsinline></video>
@@ -48,9 +48,9 @@
         <div class="creator-card__metric" title={metric.label}>
           <span class="creator-card__metric-icon">
             {#if metric.icon === "download"}
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v11m0 0-4-4m4 4 4-4M5 18v2h14v-2"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3v11m0 0-4-4m4 4 4-4M5 18v2h14v-2"/></svg>
             {:else if metric.icon === "like"}
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 11v10M15 5l-1 6h5.5a1.5 1.5 0 0 1 1.5 1.8l-1.3 6A2 2 0 0 1 17 21H7"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 11v10M15 5l-1 6h5.5a1.5 1.5 0 0 1 1.5 1.8l-1.3 6A2 2 0 0 1 17 21H7"/></svg>
             {:else}
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="m12 2 3.1 6.3L22 9.3l-5 4.9 1.2 6.8-6.2-3.2L5.8 21 7 14.2 2 9.3l6.9-1z"/></svg>
             {/if}
@@ -99,11 +99,18 @@
 <style>
   .creator-card {
     position: relative;
-    height: 189px;
+    height: 195px;
     overflow: hidden;
-    border: 1px solid #373a40;
-    border-radius: 8px;
-    background: #25262b;
+    border: 1px solid var(--civ-border, rgba(42, 58, 78, 0.6));
+    border-radius: 16px;
+    background: var(--civ-panel, #131c29);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
+    transition: border-color 200ms ease, box-shadow 200ms ease;
+  }
+
+  .creator-card:hover {
+    border-color: rgba(103, 232, 198, 0.35);
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
   }
 
   .creator-card__hero {
@@ -122,21 +129,21 @@
 
   .creator-card__background--fallback {
     background:
-      radial-gradient(circle at 78% 20%, rgb(59 130 246 / 0.4), transparent 30%),
-      radial-gradient(circle at 18% 70%, rgb(124 58 237 / 0.34), transparent 38%),
-      linear-gradient(135deg, #172554, #312e81 48%, #25262b);
+      radial-gradient(circle at 78% 20%, rgba(103, 232, 198, 0.3), transparent 35%),
+      radial-gradient(circle at 18% 70%, rgba(183, 164, 255, 0.25), transparent 40%),
+      linear-gradient(135deg, #0b1018, #131c29 50%, #1a2636);
   }
 
   .creator-card__wash {
     position: absolute;
     inset: 0;
-    background: linear-gradient(180deg, rgb(10 11 14 / 0.08) 0%, rgb(10 11 14 / 0.15) 52%, rgb(10 11 14 / 0.9) 100%);
+    background: linear-gradient(180deg, rgba(11, 16, 24, 0.1) 0%, rgba(11, 16, 24, 0.35) 50%, rgba(11, 16, 24, 0.95) 100%);
   }
 
   .creator-card__metrics {
     position: absolute;
-    top: 16px;
-    left: 16px;
+    top: 14px;
+    left: 14px;
     display: flex;
     gap: 6px;
     z-index: 2;
@@ -147,13 +154,13 @@
     align-items: center;
     gap: 5px;
     min-height: 26px;
-    padding: 3px 8px 3px 5px;
-    border: 1px solid rgb(255 255 255 / 0.14);
+    padding: 3px 9px 3px 5px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
     border-radius: 999px;
-    color: #f8fafc;
-    background: rgb(22 23 27 / 0.76);
-    box-shadow: 0 4px 14px rgb(0 0 0 / 0.24);
-    backdrop-filter: blur(7px);
+    color: var(--civ-ink, #ecf4fb);
+    background: rgba(11, 16, 24, 0.7);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(8px);
     font-size: 11px;
     font-weight: 700;
   }
@@ -164,38 +171,39 @@
     height: 18px;
     place-items: center;
     border-radius: 50%;
-    color: #dbeafe;
-    background: rgb(59 130 246 / 0.22);
+    color: var(--civ-accent, #67e8c6);
+    background: rgba(103, 232, 198, 0.18);
   }
 
   .creator-card__metric-icon svg {
-    width: 12px;
-    height: 12px;
+    width: 11px;
+    height: 11px;
   }
 
   .creator-card__badge {
     position: absolute;
-    top: 16px;
-    right: 16px;
+    top: 14px;
+    right: 14px;
     z-index: 2;
-    width: 60px;
-    height: 60px;
+    width: 58px;
+    height: 58px;
     object-fit: contain;
-    filter: drop-shadow(0 6px 10px rgb(0 0 0 / 0.42));
+    filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.5));
   }
 
   .creator-card__profile {
     position: absolute;
-    inset: 92px 0 auto;
+    inset: 94px 0 auto;
     z-index: 3;
     display: flex;
-    height: 53px;
+    height: 54px;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
     padding: 8px 16px;
-    background: rgb(16 17 19 / 0.4);
-    backdrop-filter: blur(10px);
+    background: rgba(19, 28, 41, 0.75);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .creator-card__identity {
@@ -210,7 +218,7 @@
 
   .creator-card__avatar-wrap {
     position: absolute;
-    top: -12px;
+    top: -14px;
     left: 16px;
     width: 60px;
     height: 60px;
@@ -221,13 +229,14 @@
     width: 60px;
     height: 60px;
     place-items: center;
-    border: 3px solid rgb(22 23 27 / 0.92);
+    border: 3px solid var(--civ-panel, #131c29);
     border-radius: 50%;
     object-fit: cover;
     color: white;
-    background: #373a40;
+    background: var(--civ-panel-raised, #1a2636);
     font-size: 20px;
     font-weight: 700;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
   }
 
   .creator-card__avatar-deco {
@@ -250,8 +259,8 @@
 
   .creator-card__name {
     overflow: hidden;
-    color: #fff;
-    font-size: 16px;
+    color: var(--civ-ink, #ecf4fb);
+    font-size: 15px;
     font-weight: 750;
     line-height: 20px;
     text-overflow: ellipsis;
@@ -259,7 +268,7 @@
   }
 
   .creator-card__joined {
-    color: #a1a1aa;
+    color: var(--civ-muted, #a0b2c6);
     font-size: 11px;
     line-height: 15px;
   }
@@ -267,23 +276,23 @@
   .creator-card__profile-link {
     display: inline-flex;
     height: 32px;
+    width: 32px;
     flex: 0 0 auto;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    gap: 6px;
-    border: 1px solid rgb(245 158 11 / 0.4);
-    border-radius: 6px;
-    color: #fbbf24;
-    background: rgb(180 83 9 / 0.2);
+    border: 1px solid rgba(255, 201, 130, 0.4);
+    border-radius: 8px;
+    color: var(--civ-warm, #ffc982);
+    background: rgba(255, 201, 130, 0.12);
     text-decoration: none;
-    transition: background-color 150ms ease, border-color 150ms ease;
+    transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
   }
 
   .creator-card__profile-link:hover {
-    border-color: #f59e0b;
-    background: rgb(245 158 11 / 0.3);
-    color: #fcd34d;
+    border-color: var(--civ-warm, #ffc982);
+    background: rgba(255, 201, 130, 0.25);
+    color: #fff;
+    transform: scale(1.05);
   }
 
   .creator-card__profile-link svg {
@@ -296,11 +305,11 @@
     inset: auto 0 0;
     z-index: 4;
     display: flex;
-    height: 44px;
+    height: 45px;
     align-items: center;
     padding: 6px 16px;
-    border-top: 1px solid rgb(55 58 64 / 0.8);
-    background: rgb(37 38 43 / 0.4);
+    border-top: 1px solid var(--civ-border, rgba(42, 58, 78, 0.6));
+    background: rgba(19, 28, 41, 0.6);
     backdrop-filter: blur(10px);
   }
 
@@ -308,20 +317,19 @@
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    color: #909296;
-    font-size: 11px;
+    color: var(--civ-muted, #a0b2c6);
+    font-size: 12px;
     font-weight: 650;
     text-decoration: none;
     transition: color 150ms ease;
   }
 
   .creator-card__footer a:hover {
-    color: #74c0fc;
+    color: var(--civ-warm, #ffc982);
   }
 
   .creator-card__footer svg {
     width: 18px;
     height: 18px;
   }
-
 </style>
