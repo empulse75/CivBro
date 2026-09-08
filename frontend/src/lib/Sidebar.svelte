@@ -295,6 +295,26 @@
       </div>
     </div>
   </div>
+  <!-- Studio intro: the workspace hero lives here so the grid gets the full
+       workspace height. Copy tracks the active tab like the old hero did. -->
+  <div class="px-4 pt-2.5 pb-3 border-b border-[#2a3a4e]/60 shrink-0">
+    <p class="text-[8px] font-bold tracking-[1.8px] uppercase text-[#a0b2c6]/80">
+      {appState.activeTab === "browse" ? "A playground for your imagination" : "The keepers. The favourites. The what-ifs."}
+    </p>
+    <h1 class="mt-1 text-[17px] leading-[1.18] font-bold tracking-[-0.4px] text-[#ecf4fb]">
+      {appState.activeTab === "browse" ? "Find your next" : "Good finds."}
+      <span class="text-[#67e8c6]">{appState.activeTab === "browse" ? "happy accident." : "All yours."}</span>
+    </h1>
+    <p class="mt-1 text-[10.5px] leading-[1.55] text-[#a0b2c6]">
+      {appState.activeTab === "browse"
+        ? "Fresh inspiration, remarkable models. Make something a little unexpected."
+        : "Your local model library, ready for whatever you dream up next."}
+    </p>
+    <p class="mt-1 text-[10px] italic text-[#ffc982]" style="font-family: Georgia, serif;">
+      <svg class="inline w-3 h-3 -mt-0.5 mr-0.5" viewBox="0 0 24 24" fill="#ffc982" aria-hidden="true"><path d="m12 2 2.4 6.9L21 11l-6.6 2.1L12 20l-2.4-6.9L3 11l6.6-2.1Z" /></svg>
+      Stay curious.
+    </p>
+  </div>
 
   <!-- Scrollable Control Rail -->
   <div class="flex-1 overflow-y-auto px-3.5 py-3 flex flex-col gap-4 text-xs scrollbar-thin scrollbar-thumb-[#2a3a4e] scrollbar-track-transparent">

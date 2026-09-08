@@ -87,25 +87,6 @@
       {/if}
     </header>
 
-    <section class="studio-intro" aria-labelledby="workspace-title">
-      <div class="intro-copy">
-        <p class="eyebrow">{browse ? "A PLAYGROUND FOR YOUR IMAGINATION" : "THE KEEPERS. THE FAVOURITES. THE WHAT-IFS."}</p>
-        <h1 id="workspace-title">{browse ? "Find your next" : "Good finds."} <span>{browse ? "happy accident." : "All yours."}</span></h1>
-        <p class="intro-description">{browse ? "Fresh inspiration, remarkable models. Make something a little unexpected." : "Your local model library, ready for whatever you dream up next."}</p>
-      </div>
-      <div class="studio-doodle" aria-hidden="true">
-        <svg viewBox="0 0 210 130" fill="none">
-          <ellipse cx="103" cy="67" rx="89" ry="31" transform="rotate(-22 103 67)" stroke="#67e8c6" stroke-opacity=".3" stroke-dasharray="3 5" />
-          <rect x="68" y="28" width="66" height="78" rx="17" transform="rotate(-15 68 28)" fill="#1a3031" stroke="#67e8c6" stroke-opacity=".45" />
-          <rect x="97" y="21" width="66" height="78" rx="17" transform="rotate(13 97 21)" fill="#27263e" stroke="#b7a4ff" stroke-opacity=".65" />
-          <path d="m121 39 5 17 17 5-17 5-5 17-5-17-17-5 17-5Z" fill="#b7a4ff" />
-          <circle cx="42" cy="55" r="8" fill="#67e8c6" /><path d="m173 88 3 9 9 3-9 3-3 9-3-9-9-3 9-3Z" fill="#ffc982" />
-          <path d="m48 110 3-6 3 6m-3-6v13M174 27l7-6m-8 1 9 5" stroke="#ffc982" stroke-width="2" stroke-linecap="round" />
-        </svg>
-        <span>Stay curious.</span>
-      </div>
-    </section>
-
     {#if appState.error}
       <div class="error-notice" role="alert">
         <span>{appState.error}</span>
@@ -161,14 +142,6 @@
   .view-switch button:hover { color: var(--civ-ink); background: #1a2636; }
   .view-switch button.active { color: var(--civ-accent); background: #223b38; box-shadow: 0 2px 6px #0002; }
   .view-switch svg { width: 16px; height: 16px; }
-  .studio-intro { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 28px 32px 25px; flex-shrink: 0; }
-  .eyebrow { color: var(--civ-muted); font-size: 9px; font-weight: 650; letter-spacing: 1.9px; margin-bottom: 10px; }
-  h1 { max-width: 640px; font-size: clamp(27px, 3.1vw, 44px); line-height: 1.13; font-weight: 650; letter-spacing: -1.6px; }
-  h1 span { color: var(--civ-accent); }
-  .intro-description { font-size: 12px; line-height: 1.7; color: var(--civ-muted); margin-top: 12px; max-width: 490px; }
-  .studio-doodle { width: 180px; flex-shrink: 0; text-align: center; transform: rotate(-4deg); }
-  .studio-doodle svg { width: 100%; height: 105px; }
-  .studio-doodle span { color: var(--civ-warm); font-size: 11px; font-family: Georgia, serif; font-style: italic; }
   .collection-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 0 30px; padding: 16px 0; border-top: 1px solid var(--civ-border); flex-shrink: 0; }
   .collection-heading > div { display: flex; align-items: center; gap: 10px; }
   h2 { font-size: 13px; font-weight: 650; }
@@ -191,20 +164,14 @@
   .loading-panel p { color: var(--civ-muted); font-size: 12px; }
   .loading-orbit { width: 40px; height: 40px; margin-bottom: 8px; border: 2px solid #67e8c625; border-top-color: var(--civ-accent); border-radius: 50%; animation: orbit 1s linear infinite; }
   @keyframes orbit { to { transform: rotate(360deg); } }
-  @media (max-width: 1100px) { .workspace-label { display: none; } .workspace-header { justify-content: flex-end; } .studio-doodle { width: 125px; } .feed-note { display: none; } }
-  @media (max-width: 900px) { .workspace-header { justify-content: space-between; padding: 12px 20px; } .studio-intro { padding: 24px; } .collection-heading { margin: 0 24px; } }
+  @media (max-width: 1100px) { .workspace-label { display: none; } .workspace-header { justify-content: flex-end; } .feed-note { display: none; } }
+  @media (max-width: 900px) { .workspace-header { justify-content: space-between; padding: 12px 20px; } .collection-heading { margin: 0 24px; } }
   @media (max-width: 600px) {
     .workspace-header { padding: 10px 14px; min-height: 64px; gap: 8px; }
     .view-switch button { font-size: 11px; padding: 8px 10px; gap: 5px; }
     .view-switch svg { width: 14px; height: 14px; }
     .filter-trigger { min-height: 38px; padding: 8px 10px; font-size: 11px; }
-    .studio-intro { padding: 19px 18px 20px; }
-    .eyebrow { font-size: 8px; letter-spacing: 1.4px; }
-    h1 { font-size: 30px; letter-spacing: -1px; max-width: 330px; }
-    .intro-description { font-size: 11px; margin-top: 9px; }
-    .studio-doodle { display: none; }
     .collection-heading { margin: 0 18px; padding: 12px 0; }
     .error-notice { margin: 0 14px 10px; flex-wrap: wrap; }
   }
-  @media (max-height: 620px) { .studio-intro { padding-top: 14px; padding-bottom: 14px; } .studio-doodle, .intro-description, .eyebrow { display: none; } h1 { font-size: 26px; } }
 </style>
