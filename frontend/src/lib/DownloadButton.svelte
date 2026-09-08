@@ -16,7 +16,7 @@
   const isUnlocked = $derived(status === "buzzUnlocked");
 
   let btnClass = $derived.by(() => {
-    let cls = "civ-download-btn relative w-9 h-9 rounded-full bg-black/60 backdrop-blur-md border text-white flex items-center justify-center transition-all duration-200 cursor-pointer shadow-md hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--civ-accent,#67e8c6)] ";
+    let cls = "civ-download-btn relative w-9 h-9 rounded-full bg-black/70 border text-white flex items-center justify-center transition-all duration-200 cursor-pointer shadow-md hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--civ-accent,#67e8c6)] ";
     if (spinner) return cls + "bg-[#e03131]/40 border-[#e03131] hover:bg-[#e03131] hover:border-[#e03131] text-white shadow-[0_0_12px_rgba(224,49,49,0.5)]";
     if (isLocked) return cls + "border-[#fab005] text-[#fab005] bg-[#fab005]/15 hover:bg-[#fab005] hover:text-[#0b1018] hover:border-[#fab005] shadow-[0_0_12px_rgba(250,176,5,0.3)]";
     if (isApiLocked) return cls + "border-[#ef4444] text-[#ef4444] bg-[#ef4444]/15 hover:bg-[#ef4444] hover:text-white hover:border-[#ef4444]";

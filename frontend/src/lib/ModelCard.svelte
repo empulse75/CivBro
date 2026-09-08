@@ -430,7 +430,7 @@
       ></video>
       {#if !videoPlaying}
         <div class="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-          <div class="w-11 h-11 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center border border-white/20 shadow-lg">
+          <div class="w-11 h-11 rounded-full bg-black/60 flex items-center justify-center border border-white/20 shadow-lg">
             <svg class="w-5 h-5 text-white ml-0.5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
           </div>
         </div>
@@ -464,14 +464,14 @@
       <span class="text-white text-xs font-bold bg-rose-600/90 px-3 py-1 rounded-full shadow-md tracking-wide uppercase">
         NSFW
       </span>
-      <span class="text-white/80 text-xs font-medium bg-black/40 px-2.5 py-0.5 rounded-full backdrop-blur-sm">Click to reveal</span>
+      <span class="text-white/80 text-xs font-medium bg-black/40 px-2.5 py-0.5 rounded-full">Click to reveal</span>
     </div>
   {/if}
 
   <!-- type + base-model family pill (top-left) -->
   <div class="absolute top-2.5 left-2.5 flex flex-wrap items-start gap-1.5 pr-12 pointer-events-none z-10" style="max-width:calc(100% - 48px)">
     {#if typeLabel}
-      <span class="inline-flex flex-wrap items-center text-[12px] font-bold uppercase tracking-wider text-white bg-black/60 backdrop-blur-md border border-white/15 rounded-full px-2.5 py-1 shadow-sm">
+      <span class="inline-flex flex-wrap items-center text-[12px] font-bold uppercase tracking-wider text-white bg-black/65 border border-white/15 rounded-full px-2.5 py-1">
         <span>{typeLabel}</span>
         {#if familyItems.length}
           <span class="opacity-40">&nbsp;|&nbsp;</span>
@@ -488,9 +488,9 @@
       </span>
     {/if}
     {#if isEarlyAccess}
-      <span class="inline-flex items-center text-[11px] font-bold uppercase tracking-wider text-[#0b1018] bg-[var(--civ-accent,#67e8c6)] rounded-full px-2.5 py-1 shadow-sm">Early Access</span>
+      <span class="inline-flex items-center text-[11px] font-bold uppercase tracking-wider text-[#0b1018] bg-[var(--civ-accent,#67e8c6)] rounded-full px-2.5 py-1">Early Access</span>
     {:else if isUpdated}
-      <span class="inline-flex items-center text-[11px] font-bold uppercase tracking-wider text-[#0b1018] bg-[var(--civ-accent,#67e8c6)] rounded-full px-2.5 py-1 shadow-sm">Updated</span>
+      <span class="inline-flex items-center text-[11px] font-bold uppercase tracking-wider text-[#0b1018] bg-[var(--civ-accent,#67e8c6)] rounded-full px-2.5 py-1">Updated</span>
     {/if}
   </div>
 
@@ -504,7 +504,7 @@
       <div class="relative shrink-0 w-8 h-8">
         {#if model.creator?.image}
           <img
-            class="absolute inset-0 w-full h-full rounded-full object-cover border border-white/30 shadow-sm"
+            class="absolute inset-0 w-full h-full rounded-full object-cover border border-white/30"
             src={model.creator.image}
             alt={model.creator.username}
           />
@@ -525,14 +525,14 @@
         {/if}
       </div>
       <span
-        class="text-sm font-semibold truncate drop-shadow-md"
+        class="text-sm font-semibold truncate civ-text-shadow"
         style="{nameStyle || 'color:rgb(240,246,252)'}"
       >
         {model.creator?.username || "Unknown"}
       </span>
       {#if model.badge}
         <img
-          class="h-7 w-auto shrink-0 drop-shadow-sm"
+          class="h-7 w-auto shrink-0"
           style="object-fit:contain;"
           src={model.badge}
           alt=""
@@ -541,10 +541,10 @@
       {/if}
     </div>
 
-    <p class="text-lg font-bold text-[#ecf4fb] leading-snug line-clamp-2 drop-shadow-md group-hover:text-[var(--civ-accent,#67e8c6)] transition-colors duration-200">{model.name}</p>
+    <p class="text-lg font-bold text-[#ecf4fb] leading-snug line-clamp-2 civ-text-shadow group-hover:text-[var(--civ-accent,#67e8c6)] transition-colors duration-200">{model.name}</p>
 
     <div class="flex items-center gap-1.5 mt-2 flex-wrap">
-      <div class="inline-flex items-center gap-2 bg-black/50 backdrop-blur-md border border-white/10 rounded-full px-2.5 py-1 text-xs text-white/90 font-semibold shadow-sm">
+      <div class="inline-flex items-center gap-2 bg-black/60 border border-white/10 rounded-full px-2.5 py-1 text-xs text-white/90 font-semibold">
         {#if downloadCount}
           <span class="inline-flex items-center gap-1 text-[var(--civ-accent,#67e8c6)]">
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -571,7 +571,7 @@
         {/if}
       </div>
       {#if likes > 0}
-        <div class="inline-flex items-center gap-1 bg-black/50 backdrop-blur-md border border-white/10 rounded-full px-2.5 py-1 text-xs text-[var(--civ-warm,#ffc982)] font-semibold shadow-sm">
+        <div class="inline-flex items-center gap-1 bg-black/60 border border-white/10 rounded-full px-2.5 py-1 text-xs text-[var(--civ-warm,#ffc982)] font-semibold">
           <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/></svg>
           {fmtCount(likes)}
         </div>
