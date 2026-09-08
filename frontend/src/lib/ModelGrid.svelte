@@ -86,6 +86,11 @@
   {:else if models.length > 0 && !loading}
     <div class="feed-end"><span aria-hidden="true">✦</span> You’re all caught up. Go make something.</div>
   {/if}
+  {#if models.length > 0}
+    <!-- Overscroll room: keeps the last row from sitting on the viewport edge
+         and lets new pages stream in without the scroll position jumping. -->
+    <div class="feed-overscroll" aria-hidden="true"></div>
+  {/if}
 </div>
 
 <style>
@@ -100,6 +105,7 @@
   .skeleton-copy > div { height: 10px; width: 75%; }
   .skeleton-copy > div:last-child { width: 45%; }
   .empty-discovery { min-height: min(380px, 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 28px 12px; }
+  .feed-overscroll { height: 50vh; }
   .empty-art { width: 92px; height: 92px; padding: 8px; margin-bottom: 8px; color: var(--civ-accent); border-radius: 28px; background: #67e8c609; transform: rotate(-8deg); }
   .empty-eyebrow { font-size: 8px; letter-spacing: 1.8px; color: var(--civ-violet); }
   .empty-discovery h3 { font-size: clamp(20px, 2vw, 26px); letter-spacing: -.5px; font-weight: 600; }

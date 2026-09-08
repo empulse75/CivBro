@@ -314,6 +314,30 @@
       <svg class="inline w-3 h-3 -mt-0.5 mr-0.5" viewBox="0 0 24 24" fill="#ffc982" aria-hidden="true"><path d="m12 2 2.4 6.9L21 11l-6.6 2.1L12 20l-2.4-6.9L3 11l6.6-2.1Z" /></svg>
       Stay curious.
     </p>
+    <nav class="mt-2.5 flex items-center gap-1.5 p-1 border border-[#2a3a4e]/70 bg-[#101823] rounded-xl" aria-label="Workspace views">
+      <button
+        class="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200 cursor-pointer
+          {appState.activeTab === 'browse'
+            ? 'text-[#67e8c6] bg-[#223b38] shadow-sm shadow-black/20'
+            : 'text-[#a0b2c6] hover:bg-[#1a2636] hover:text-[#ecf4fb]'}"
+        aria-current={appState.activeTab === "browse" ? "page" : undefined}
+        onclick={() => appState.setActiveTab("browse")}
+      >
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m12 3 2.7 6.3L21 12l-6.3 2.7L12 21l-2.7-6.3L3 12l6.3-2.7Z" /></svg>
+        Discover{appState.activeTab === "browse" ? ` · ${appState.visibleModels.length}` : ""}
+      </button>
+      <button
+        class="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-200 cursor-pointer
+          {appState.activeTab === 'local'
+            ? 'text-[#67e8c6] bg-[#223b38] shadow-sm shadow-black/20'
+            : 'text-[#a0b2c6] hover:bg-[#1a2636] hover:text-[#ecf4fb]'}"
+        aria-current={appState.activeTab === "local" ? "page" : undefined}
+        onclick={() => appState.setActiveTab("local")}
+      >
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h6l2 2h8v12H4Z"/><path d="M4 6V4h6l2 2h8v2"/></svg>
+        Collection
+      </button>
+    </nav>
   </div>
 
   <!-- Scrollable Control Rail -->

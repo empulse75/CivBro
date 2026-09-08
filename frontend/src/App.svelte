@@ -56,59 +56,37 @@
     else appState.refreshLocalModels();
   }
 </script>
+  <div class="studio-shell">
+    {#if !compact}
+      <div class="desktop-rail"><Sidebar onSelectModel={handleSelectModel} /></div>
+    {/if}
 
-<svelte:window onkeydown={(event) => {
-  if (event.key === "Escape" && appState.popupLoading) handleClosePopup();
-}} />
-
-<div class="studio-shell">
-  {#if !compact}
-    <div class="desktop-rail"><Sidebar onSelectModel={handleSelectModel} /></div>
-  {/if}
-
-  <main class="workspace">
-    <header class="workspace-header">
-      <div class="workspace-label"><span class="workspace-dot"></span><span>YOUR CREATIVE CORNER</span></div>
-      <nav class="view-switch" aria-label="Workspace views">
-        <button class:active={browse} aria-current={browse ? "page" : undefined} onclick={() => handleTabChange("browse")}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m12 3 2.7 6.3L21 12l-6.3 2.7L12 21l-2.7-6.3L3 12l6.3-2.7Z" /></svg>
-          Discover
-        </button>
-        <button class:active={!browse} aria-current={!browse ? "page" : undefined} onclick={() => handleTabChange("local")}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h6l2 2h8v12H4Z"/><path d="M4 6V4h6l2 2h8v2"/></svg>
-          My collection
-        </button>
-      </nav>
+    <main class="workspace">
       {#if compact}
-        <button class="civ-button filter-trigger" aria-haspopup="dialog" onclick={() => filtersOpen = true}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="currentColor"/><circle cx="15" cy="17" r="3" fill="currentColor"/></svg>
-          Filters
-        </button>
+        <header class="workspace-header">
+          <button class="civ-button filter-trigger" aria-haspopup="dialog" onclick={() => filtersOpen = true}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="currentColor"/><circle cx="15" cy="17" r="3" fill="currentColor"/></svg>
+            Filters
+          </button>
+        </header>
       {/if}
-    </header>
 
-    {#if appState.error}
-      <div class="error-notice" role="alert">
-        <span>{appState.error}</span>
-        <button class="civ-button" onclick={() => browse ? appState.fetchModels(true) : appState.refreshLocalModels()}>Try again</button>
-      </div>
-    {/if}
-
-    {#if browse}
-      <div class="collection-heading">
-        <div><h2>The discovery feed</h2><span class="result-count">{appState.visibleModels.length} loaded</span></div>
-        <span class="feed-note">Handmade by the community. Discovered by you.</span>
-      </div>
-    {/if}
-    <div class="workspace-content">
-      {#if browse}
-        <ModelGrid models={appState.visibleModels} loading={appState.isLoading} loadingMore={appState.isLoadingMore} hasMore={appState.hasMore} onSelectModel={handleSelectModel} onLoadMore={() => appState.loadMore()} />
-      {:else}
-        <LocalTab />
+      {#if appState.error}
+        <div class="error-notice" role="alert">
+          <span>{appState.error}</span>
+          <button class="civ-button" onclick={() => browse ? appState.fetchModels(true) : appState.refreshLocalModels()}>Try again</button>
+        </div>
       {/if}
-    </div>
-  </main>
-</div>
+
+      <div class="workspace-content">
+        {#if browse}
+          <ModelGrid models={appState.visibleModels} loading={appState.isLoading} loadingMore={appState.isLoadingMore} hasMore={appState.hasMore} onSelectModel={handleSelectModel} onLoadMore={() => appState.loadMore()} />
+        {:else}
+          <LocalTab />
+        {/if}
+      </div>
+    </main>
+  </div>
 
 {#if compact}
   <dialog class="filter-dialog" bind:this={filterDialog} aria-label="Browse filters and settings" onclose={() => filtersOpen = false} oncancel={() => filtersOpen = false}>
@@ -134,19 +112,7 @@
   .studio-shell { display: flex; height: 100%; background: var(--civ-bg); }
   .desktop-rail { width: 280px; flex-shrink: 0; min-height: 0; border-right: 1px solid var(--civ-border); }
   .workspace { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; background: radial-gradient(ellipse at 70% 0, #14242b 0, transparent 55%); }
-  .workspace-header { min-height: 72px; padding: 14px 30px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-shrink: 0; border-bottom: 1px solid #ffffff08; }
-  .workspace-label { display: flex; align-items: center; gap: 9px; font-size: 9px; letter-spacing: 1.8px; font-weight: 700; color: var(--civ-muted); }
-  .workspace-dot { width: 7px; height: 7px; background: var(--civ-accent); border-radius: 50%; box-shadow: 0 0 16px #67e8c640; }
-  .view-switch { display: flex; gap: 3px; padding: 4px; border: 1px solid var(--civ-border); background: #101823; border-radius: 14px; }
-  .view-switch button { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 15px; color: var(--civ-muted); border-radius: 10px; font-size: 12px; font-weight: 600; transition: background .2s, color .2s; }
-  .view-switch button:hover { color: var(--civ-ink); background: #1a2636; }
-  .view-switch button.active { color: var(--civ-accent); background: #223b38; box-shadow: 0 2px 6px #0002; }
-  .view-switch svg { width: 16px; height: 16px; }
-  .collection-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 0 30px; padding: 16px 0; border-top: 1px solid var(--civ-border); flex-shrink: 0; }
-  .collection-heading > div { display: flex; align-items: center; gap: 10px; }
-  h2 { font-size: 13px; font-weight: 650; }
-  .result-count { color: var(--civ-violet); background: #b7a4ff12; border: 1px solid #b7a4ff23; border-radius: 7px; padding: 3px 7px; font-size: 10px; font-variant-numeric: tabular-nums; }
-  .feed-note { color: var(--civ-muted); font-size: 10px; }
+  .workspace-header { padding: 10px 30px 6px; display: flex; justify-content: flex-end; flex-shrink: 0; }
   .workspace-content { flex: 1; min-height: 0; overflow: hidden; position: relative; }
   .error-notice { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 30px 12px; padding: 12px 16px; border: 1px solid #ff99844d; border-radius: 14px; background: #ff998410; color: #ffc1b4; font-size: 12px; }
   .error-notice span { overflow-wrap: anywhere; }
@@ -164,14 +130,10 @@
   .loading-panel p { color: var(--civ-muted); font-size: 12px; }
   .loading-orbit { width: 40px; height: 40px; margin-bottom: 8px; border: 2px solid #67e8c625; border-top-color: var(--civ-accent); border-radius: 50%; animation: orbit 1s linear infinite; }
   @keyframes orbit { to { transform: rotate(360deg); } }
-  @media (max-width: 1100px) { .workspace-label { display: none; } .workspace-header { justify-content: flex-end; } .feed-note { display: none; } }
-  @media (max-width: 900px) { .workspace-header { justify-content: space-between; padding: 12px 20px; } .collection-heading { margin: 0 24px; } }
+  @media (max-width: 900px) { .workspace-header { padding: 10px 20px 6px; } }
   @media (max-width: 600px) {
-    .workspace-header { padding: 10px 14px; min-height: 64px; gap: 8px; }
-    .view-switch button { font-size: 11px; padding: 8px 10px; gap: 5px; }
-    .view-switch svg { width: 14px; height: 14px; }
+    .workspace-header { padding: 10px 14px 4px; }
     .filter-trigger { min-height: 38px; padding: 8px 10px; font-size: 11px; }
-    .collection-heading { margin: 0 18px; padding: 12px 0; }
     .error-notice { margin: 0 14px 10px; flex-wrap: wrap; }
   }
 </style>

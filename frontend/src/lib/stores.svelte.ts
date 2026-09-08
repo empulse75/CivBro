@@ -157,6 +157,12 @@ export function createAppState() {
     set modelVersions(v: ModelVersion[]) { browse.modelVersions = v; },
     get activeTab() { return activeTab; },
     set activeTab(v: "browse" | "local") { activeTab = v; },
+    setActiveTab(tab: "browse" | "local") {
+      if (activeTab === tab) return;
+      activeTab = tab;
+      if (tab === "browse") browse.fetchModels(true);
+      else local.refreshLocalModels();
+    },
     get isLoading() { return browse.isLoading; },
     set isLoading(v: boolean) { browse.isLoading = v; },
     get isLoadingMore() { return browse.isLoadingMore; },

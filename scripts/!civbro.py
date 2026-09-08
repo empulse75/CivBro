@@ -46,8 +46,11 @@ def on_ui_tabs():
     with gr.Blocks() as block:
         # Scripts embedded in gr.HTML do not execute reliably. The WebUI loads
         # javascript/civbro.js through its native extension lifecycle instead.
+        # 150px = measured Forge chrome above the tab panel (~130px) plus
+        # panel padding, so the iframe bottom sits just inside the viewport
+        # instead of clipping below it and leaving a scrollable dead zone.
         gr.HTML('''<iframe id="civbro-iframe" title="CivBro model browser"
-            style="width:100%;height:calc(100vh - 120px);border:0"></iframe>''')
+            style="width:100%;height:calc(100vh - 150px);border:0"></iframe>''')
     return [(block, "CivBro", "civbro_tab")]
 
 
