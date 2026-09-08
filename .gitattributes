@@ -1,0 +1,8 @@
+# Consistent text hashing and shell scripts across Windows and Unix checkouts.
+* text=auto
+*.py text eol=lf
+*.rs text eol=lf
+*.toml text eol=lf
+*.lock text eol=lf
+*.yml text eol=lf
+*.webp binary

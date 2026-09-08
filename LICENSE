@@ -1,0 +1,177 @@
+CivBro License v1.0 — Use Only, No Modification, No Redistribution
+
+Copyright (c) 2026 empulse75. All rights reserved.
+
+This software is NOT open source. It is published as source-visible software
+under the terms below. If you do not accept these terms, you have no licence to
+use the Software and must delete all copies of it.
+
+--------------------------------------------------------------------------------
+1. DEFINITIONS
+--------------------------------------------------------------------------------
+
+"Software" means the CivBro extension published in this repository, including
+its source code, prebuilt artifacts, configuration, documentation, images, and
+any updates the Licensor publishes here.
+
+"Licensor" means empulse75, the copyright holder of the Software.
+
+"You" means the individual or legal entity exercising the permissions granted by
+this licence.
+
+"Unmodified Copy" means a copy of the Software whose contents are identical to
+the contents published by the Licensor, with no additions, deletions, or
+alterations of any kind.
+
+--------------------------------------------------------------------------------
+2. GRANT — WHAT YOU MAY DO
+--------------------------------------------------------------------------------
+
+Subject to Your continuous compliance with this licence, the Licensor grants You
+a personal, worldwide, royalty-free, non-exclusive, non-transferable,
+non-sublicensable, revocable licence to:
+
+  (a) download, clone, and store Unmodified Copies of the Software;
+
+  (b) install and run the Software as an extension of Stable Diffusion WebUI on
+      any number of computers that You own or control, for Your own personal
+      purposes or the internal purposes of Your organisation (internal
+      commercial use is permitted);
+
+  (c) compile or bundle the Software from the source published here — without
+      altering that source — solely to produce the artifacts required to run
+      Your own installation (for example, building the Rust core library or the
+      frontend bundle);
+
+  (d) make backup or archival copies of Unmodified Copies; and
+
+  (e) read and study the source code.
+
+Using the Software's supported settings, writing runtime data, and generating
+local build artifacts as permitted above are normal use, not prohibited
+modifications. This does not permit editing the program's source code.
+
+--------------------------------------------------------------------------------
+3. RESTRICTIONS — WHAT YOU MAY NOT DO
+--------------------------------------------------------------------------------
+
+Except as expressly permitted in Section 2, or to the extent such a restriction
+is unenforceable under applicable law, You may NOT:
+
+  (a) modify, adapt, patch, translate, refactor, extend, or otherwise alter the
+      Software, nor create derivative works based on it, whether or not those
+      works are distributed;
+
+  (b) distribute, publish, upload, mirror, host, sublicense, sell, rent, lease,
+      lend, or otherwise make the Software or any part of it available to any
+      third party, in source or compiled form;
+
+  (c) incorporate the Software or any part of it into another program, product,
+      extension, dataset, or model, or use it as a component or template of a
+      work that You distribute;
+
+  (d) provide the Software to third parties as a hosted, managed, or
+      software-as-a-service offering, or otherwise operate it on behalf of third
+      parties;
+
+  (e) remove, obscure, or alter any copyright, licence, authorship, or
+      attribution notice contained in the Software; or
+
+  (f) use the Licensor's name, the "CivBro" name, or any Licensor trademark to
+      endorse, promote, or name any product or distribution.
+
+Platform exception: notwithstanding Section 3(b), GitHub users may view and fork
+this public repository through GitHub's functionality under GitHub's Terms of
+Service. This licence does not override those platform rights or grant
+additional permission to modify or redistribute the Licensor's original work.
+
+--------------------------------------------------------------------------------
+4. RESERVATION OF RIGHTS
+--------------------------------------------------------------------------------
+
+All rights not expressly granted in Section 2 are reserved by the Licensor. No
+rights are granted by implication, estoppel, or otherwise. This licence conveys
+no patent rights and no trademark rights.
+
+Rights beyond this licence — including permission to modify, redistribute,
+relicense, or integrate the Software into another product — require the
+Licensor's prior written permission. Requests may be made through the project's
+repository at https://github.com/empulse75/CivBro.
+
+--------------------------------------------------------------------------------
+5. THIRD-PARTY COMPONENTS
+--------------------------------------------------------------------------------
+
+The Software depends on third-party software, and its prebuilt frontend bundle
+(`frontend/dist/`) embeds compiled output derived from third-party libraries
+such as Svelte, TailwindCSS, and DOMPurify. The Rust core links third-party
+crates, and the Python backend depends on packages installed separately at
+runtime.
+
+Those components remain governed exclusively by their own licences. Nothing in
+this licence restricts, alters, or supersedes any right You hold in a
+third-party component under its own licence, and nothing here grants You rights
+in a third-party component beyond that component's own terms. This licence
+applies solely to the Licensor's own original work in the Software.
+Required notices for the bundled frontend components accompany the Software in
+THIRD_PARTY_NOTICES.txt. Previously granted rights in earlier releases are not
+revoked by this licence or by replacement of the repository's Git history.
+
+--------------------------------------------------------------------------------
+6. FEEDBACK
+--------------------------------------------------------------------------------
+
+Because modification and redistribution are prohibited, the Licensor does not
+accept code contributions under this licence. You may submit bug reports,
+descriptions, or suggestions. If You do, You grant the Licensor a perpetual,
+irrevocable, worldwide, royalty-free right to use, implement, and distribute
+that feedback without restriction or obligation to You. Submitting feedback
+grants You no rights in the Software.
+
+--------------------------------------------------------------------------------
+7. TERM AND TERMINATION
+--------------------------------------------------------------------------------
+
+This licence applies for as long as You comply with it. It terminates
+automatically and immediately if You breach any of its terms. On termination You
+must cease all use of the Software and destroy every copy in Your possession or
+control. Sections 4, 5, 6, 8, 9, and 10 survive termination.
+
+--------------------------------------------------------------------------------
+8. NO WARRANTY
+--------------------------------------------------------------------------------
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT. THE LICENSOR DOES NOT
+WARRANT THAT THE SOFTWARE WILL BE UNINTERRUPTED, ERROR-FREE, OR COMPATIBLE WITH
+ANY PARTICULAR VERSION OF STABLE DIFFUSION WEBUI, AND IS NOT RESPONSIBLE FOR ANY
+CONTENT, MODEL, OR DATA OBTAINED THROUGH THIRD-PARTY SERVICES SUCH AS CIVITAI.
+YOU BEAR THE ENTIRE RISK OF USING THE SOFTWARE.
+
+--------------------------------------------------------------------------------
+9. LIMITATION OF LIABILITY
+--------------------------------------------------------------------------------
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE LICENSOR SHALL NOT BE
+LIABLE FOR ANY CLAIM, DAMAGE, OR OTHER LIABILITY — INCLUDING DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES, LOSS OF DATA, LOSS OF
+PROFITS, OR BUSINESS INTERRUPTION — ARISING FROM OR IN CONNECTION WITH THE
+SOFTWARE OR ITS USE, WHETHER IN CONTRACT, TORT, OR OTHERWISE, EVEN IF ADVISED OF
+THE POSSIBILITY OF SUCH DAMAGE.
+
+Nothing in this licence excludes or limits liability that cannot lawfully be
+excluded or limited.
+
+--------------------------------------------------------------------------------
+10. GENERAL
+--------------------------------------------------------------------------------
+
+This licence is the entire agreement between You and the Licensor regarding the
+Software and supersedes any prior understanding. If any provision is held
+unenforceable, it shall be limited or severed to the minimum extent necessary
+and the remaining provisions stay in full force. The Licensor's failure to
+enforce a provision is not a waiver of it. You may not assign or transfer this
+licence.
+
+SPDX-License-Identifier: LicenseRef-CivBro-Use-Only-1.0

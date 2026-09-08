@@ -1,0 +1,16 @@
+# CivBro runtime dependencies, installed into the WebUI's own venv by install.py.
+#
+# Deliberately minimal. The WebUI already provides fastapi, starlette and gradio,
+# and it pins them against each other — declaring those here would let pip
+# upgrade a version the running WebUI is pinned to and break Gradio at startup.
+# Only list what CivBro needs and the WebUI does not already guarantee.
+#
+# Unversioned entries mean "must be importable"; install.py leaves an existing
+# install alone rather than forcing an upgrade inside a shared venv.
+
+# Async HTTP client for all Civitai REST/tRPC/Red traffic and download streaming.
+httpx
+
+# HTTP/2 support for httpx (httpx.AsyncClient(http2=True) in http_adapter.py).
+# Not a WebUI dependency, so pin a modern major.
+h2>=4.0.0

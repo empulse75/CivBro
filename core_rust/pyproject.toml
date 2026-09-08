@@ -1,0 +1,16 @@
+[build-system]
+requires = ["maturin>=1.11.5,<2"]
+build-backend = "maturin"
+
+[project]
+name = "civbro_core"
+version = "1.0.0"
+requires-python = ">=3.10"
+description = "Portable native parsing, hashing and database core for CivBro"
+license = { file = "LICENSE" }
+
+[tool.maturin]
+bindings = "pyo3"
+features = ["extension-module"]
+strip = true
+include = ["THIRD_PARTY_NOTICES.txt"]
